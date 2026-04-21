@@ -1,0 +1,6 @@
+---
+# Synced by Ansible Automation Platform when the project uses "Collections from Galaxy"
+# and a Galaxy/Automation Hub credential. Match your execution environment.
+collections:
+  - name: azure.azcollection
+    version: ">=2.0.0"

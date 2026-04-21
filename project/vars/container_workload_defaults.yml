@@ -1,0 +1,32 @@
+---
+# Shared defaults for container workload playbooks (00–04, 99).
+# Override in env/extravars or with -e @extra.yml
+
+container_workload_resource_group_name: "aca-ansible-demo-rg"
+container_workload_region: "eastus"
+
+# Globally unique names — change these before first deploy in a subscription.
+aca_storage_account_name: "acaansibledemo001"
+aca_acr_name: "acaansibledemoacr"
+aca_sql_server_name: "aca-ansible-demo-sql"
+aca_sql_database_name: "appdb"
+aca_sql_admin_username: "sqladmin"
+
+# Strong password required by Azure SQL (set in extravars in real use).
+aca_sql_admin_password: "ChangeMe_AnsibleDemo2026!"
+
+aca_log_analytics_name: "aca-ansible-demo-law"
+aca_container_apps_env_name: "aca-ansible-demo-env"
+aca_container_app_name: "aca-ansible-demo-app"
+
+aca_frontdoor_profile_name: "aca-ansible-fd"
+aca_frontdoor_endpoint_name: "aca-demo-endpoint"
+aca_frontdoor_origin_group_name: "aca-demo-aca-origin"
+aca_frontdoor_origin_name: "aca-backend"
+aca_frontdoor_route_name: "aca-demo-route"
+
+aca_arm_deployment_name: "aca-sample-stack"
+
+# Image imported into ACR (playbook 03) from Docker Hub.
+aca_acr_repository: "python"
+aca_acr_image_tag: "3.12-alpine"

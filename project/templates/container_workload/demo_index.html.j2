@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ansible on Azure — Container workload</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:ital,wght@0,400;0,600;0,700;1,400&family=Red+Hat+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #151515;
+      --muted: #5c5c5c;
+      --paper: #faf7f2;
+      --card: #ffffff;
+      --accent: #ee0000;
+      --accent-soft: #ffe6e6;
+      --azure: #0078d4;
+      --border: #e8e4dc;
+      --radius: 14px;
+      --shadow: 0 18px 48px rgba(21, 21, 21, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Red Hat Text", system-ui, sans-serif;
+      color: var(--ink);
+      background: radial-gradient(1200px 600px at 10% -10%, #ffe8e8 0%, transparent 55%),
+                  radial-gradient(900px 500px at 100% 0%, #e6f2ff 0%, transparent 50%),
+                  var(--paper);
+      line-height: 1.55;
+    }
+    .wrap {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 3rem;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border: 1px solid #ffc9c9;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+    }
+    h1 {
+      font-family: "Red Hat Display", system-ui, sans-serif;
+      font-weight: 700;
+      font-size: clamp(1.65rem, 4vw, 2.25rem);
+      line-height: 1.2;
+      margin: 1rem 0 0.5rem;
+      letter-spacing: -0.02em;
+    }
+    .lead {
+      font-size: 1.1rem;
+      color: var(--muted);
+      max-width: 36em;
+      margin: 0 auto;
+    }
+    .hero-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      padding: 1.75rem 1.75rem 1.5rem;
+      margin-bottom: 1.75rem;
+    }
+    .hero-card p {
+      margin: 0 0 1rem;
+      font-size: 1.05rem;
+    }
+    .hero-card strong { color: var(--ink); }
+    .hostname {
+      font-family: ui-monospace, "Cascadia Code", monospace;
+      font-size: 0.95rem;
+      background: #f4f1eb;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 0.65rem 0.85rem;
+      word-break: break-all;
+      color: #1a1a1a;
+    }
+    h2 {
+      font-family: "Red Hat Display", system-ui, sans-serif;
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin: 0 0 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    h2 span.dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--azure);
+    }
+    .grid {
+      display: grid;
+      gap: 0.65rem;
+    }
+    @media (min-width: 560px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+    .res {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.85rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .res label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+    .res code {
+      font-size: 0.88rem;
+      word-break: break-all;
+      color: #0d47a1;
+    }
+    footer {
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 2rem;
+    }
+    footer a { color: var(--azure); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="badge">Sample workload</div>
+      <h1>Deployed by Red Hat Ansible Automation Platform on Azure</h1>
+      <p class="lead">
+        This page runs inside <strong>Azure Container Apps</strong>. Use it to confirm ingress and,
+        after playbook 04, traffic through <strong>Azure Front Door (Standard)</strong>.
+      </p>
+    </header>
+
+    <section class="hero-card">
+      <p>
+        You reached this page on host
+        <strong id="via-host">…</strong>
+        <noscript>(enable JavaScript to see the hostname.)</noscript>
+      </p>
+      <div class="hostname" id="via-host-full" hidden></div>
+      <script>
+        (function () {
+          var h = location.hostname || "(unknown)";
+          var el = document.getElementById("via-host");
+          if (el) el.textContent = h;
+          var box = document.getElementById("via-host-full");
+          if (box) { box.textContent = location.href; box.hidden = false; }
+        })();
+      </script>
+    </section>
+
+    <section class="hero-card">
+      <h2><span class="dot"></span>Related Azure resources (this demo)</h2>
+      <div class="grid">
+        <div class="res">
+          <label>Resource group</label>
+          <code>{{ container_workload_resource_group_name }}</code>
+        </div>
+        <div class="res">
+          <label>Region</label>
+          <code>{{ container_workload_region }}</code>
+        </div>
+        <div class="res">
+          <label>Azure Container Registry</label>
+          <code>{{ aca_acr_name }}.azurecr.io</code>
+        </div>
+        <div class="res">
+          <label>Azure SQL server</label>
+          <code>{{ aca_sql_server_name }}.database.windows.net</code>
+        </div>
+        <div class="res">
+          <label>Azure SQL database</label>
+          <code>{{ aca_sql_database_name }}</code>
+        </div>
+        <div class="res">
+          <label>Storage account</label>
+          <code>{{ aca_storage_account_name }}</code>
+        </div>
+        <div class="res">
+          <label>Log Analytics workspace</label>
+          <code>{{ aca_log_analytics_name }}</code>
+        </div>
+        <div class="res">
+          <label>Container Apps environment</label>
+          <code>{{ aca_container_apps_env_name }}</code>
+        </div>
+        <div class="res">
+          <label>Container App</label>
+          <code>{{ aca_container_app_name }}</code>
+        </div>
+        <div class="res">
+          <label>Azure Front Door profile</label>
+          <code>{{ aca_frontdoor_profile_name }}</code>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      Red Hat Ansible Automation Platform · Microsoft Azure · Container Apps sample
+    </footer>
+  </div>
+</body>
+</html>

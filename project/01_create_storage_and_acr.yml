@@ -1,0 +1,33 @@
+---
+- name: Create storage account and Azure Container Registry
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  collections:
+    - azure.azcollection
+  vars_files:
+    - vars/container_workload_defaults.yml
+  tasks:
+    - name: Ensure resource group exists
+      azure.azcollection.azure_rm_resourcegroup:
+        name: "{{ container_workload_resource_group_name }}"
+        location: "{{ container_workload_region }}"
+
+    - name: Create storage account
+      azure.azcollection.azure_rm_storageaccount:
+        resource_group: "{{ container_workload_resource_group_name }}"
+        name: "{{ aca_storage_account_name }}"
+        location: "{{ container_workload_region }}"
+        account_type: Standard_LRS
+        kind: StorageV2
+        access_tier: Hot
+        minimum_tls_version: TLS1_2
+        allow_blob_public_access: false
+
+    - name: Create Azure Container Registry (admin enabled for demo image pull)
+      azure.azcollection.azure_rm_containerregistry:
+        resource_group: "{{ container_workload_resource_group_name }}"
+        name: "{{ aca_acr_name }}"
+        location: "{{ container_workload_region }}"
+        sku: Basic
+        admin_user_enabled: true

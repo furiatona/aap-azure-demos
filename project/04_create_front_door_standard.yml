@@ -1,0 +1,113 @@
+---
+- name: Create Azure Front Door Standard profile routing to Container App
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  collections:
+    - azure.azcollection
+  vars_files:
+    - vars/container_workload_defaults.yml
+  tasks:
+    - name: Read ARM deployment outputs for Container App FQDN
+      azure.azcollection.azure_rm_deployment_info:
+        resource_group: "{{ container_workload_resource_group_name }}"
+        name: "{{ aca_arm_deployment_name }}"
+      register: aca_dep_info
+
+    - name: Fail when deployment record is missing (run 03 first)
+      ansible.builtin.fail:
+        msg: >-
+          No deployment named {{ aca_arm_deployment_name }} in {{ container_workload_resource_group_name }}.
+          Run 03_create_container_apps_sample.yml first.
+      when: aca_dep_info.deployments | default([]) | length == 0
+
+    - name: Normalize deployment outputs
+      ansible.builtin.set_fact:
+        aca_dep_outputs: "{{ aca_dep_info.deployments[0].outputs | default({}) }}"
+
+    - name: Set Container App FQDN from deployment output
+      ansible.builtin.set_fact:
+        aca_app_fqdn: "{{ aca_dep_outputs.get('containerAppFqdn', {}).get('value', '') }}"
+
+    - name: Fail when FQDN output is missing from deployment
+      ansible.builtin.fail:
+        msg: >-
+          Deployment exists but output containerAppFqdn is empty. Re-run 03_create_container_apps_sample.yml.
+      when: aca_app_fqdn | default('') | length == 0
+
+    - name: Create Azure Front Door Standard profile
+      azure.azcollection.azure_rm_cdnprofile:
+        resource_group: "{{ container_workload_resource_group_name }}"
+        name: "{{ aca_frontdoor_profile_name }}"
+        location: "{{ container_workload_region }}"
+        sku: standard_azurefrontdoor
+
+    - name: Create AFD endpoint
+      azure.azcollection.azure_rm_afdendpoint:
+        resource_group: "{{ container_workload_resource_group_name }}"
+        profile_name: "{{ aca_frontdoor_profile_name }}"
+        name: "{{ aca_frontdoor_endpoint_name }}"
+        enabled_state: Enabled
+      register: afd_endpoint_result
+
+    - name: Record Front Door default hostname
+      ansible.builtin.set_fact:
+        aca_front_door_hostname: "{{ afd_endpoint_result.host_name }}"
+
+    - name: Create origin group with HTTPS health probe
+      azure.azcollection.azure_rm_afdorigingroup:
+        resource_group: "{{ container_workload_resource_group_name }}"
+        profile_name: "{{ aca_frontdoor_profile_name }}"
+        name: "{{ aca_frontdoor_origin_group_name }}"
+        health_probe_settings:
+          probe_interval_in_seconds: 100
+          probe_path: /
+          probe_protocol: Https
+          probe_request_type: HEAD
+        load_balancing_settings:
+          sample_size: 4
+          successful_samples_required: 3
+          additional_latency_in_milliseconds: 50
+
+    - name: Add Container App as origin
+      azure.azcollection.azure_rm_afdorigin:
+        resource_group: "{{ container_workload_resource_group_name }}"
+        profile_name: "{{ aca_frontdoor_profile_name }}"
+        origin_group_name: "{{ aca_frontdoor_origin_group_name }}"
+        name: "{{ aca_frontdoor_origin_name }}"
+        host_name: "{{ aca_app_fqdn }}"
+        origin_host_header: "{{ aca_app_fqdn }}"
+        http_port: 80
+        https_port: 443
+        priority: 1
+        weight: 1000
+        enabled_state: Enabled
+
+    - name: Create route to default endpoint hostname
+      azure.azcollection.azure_rm_afdroute:
+        resource_group: "{{ container_workload_resource_group_name }}"
+        profile_name: "{{ aca_frontdoor_profile_name }}"
+        endpoint_name: "{{ aca_frontdoor_endpoint_name }}"
+        name: "{{ aca_frontdoor_route_name }}"
+        origin_group: "{{ aca_frontdoor_origin_group_name }}"
+        enabled_state: Enabled
+        forwarding_protocol: HttpsOnly
+        https_redirect: Enabled
+        link_to_default_domain: Enabled
+        patterns_to_match:
+          - /*
+        supported_protocols:
+          - Http
+          - Https
+        rule_sets: []
+
+    - name: Show Front Door URL
+      ansible.builtin.debug:
+        msg: "Front Door URL: https://{{ aca_front_door_hostname }}"
+
+    - name: Publish Front Door hostname to job stats (optional)
+      ansible.builtin.set_stats:
+        data:
+          front_door_hostname: "{{ aca_front_door_hostname }}"
+          front_door_url: "https://{{ aca_front_door_hostname }}"
+        per_host: false

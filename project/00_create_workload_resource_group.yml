@@ -1,0 +1,14 @@
+---
+- name: Create resource group for container workload demo
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  collections:
+    - azure.azcollection
+  vars_files:
+    - vars/container_workload_defaults.yml
+  tasks:
+    - name: Create resource group
+      azure.azcollection.azure_rm_resourcegroup:
+        name: "{{ container_workload_resource_group_name }}"
+        location: "{{ container_workload_region }}"

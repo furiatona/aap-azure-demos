@@ -1,0 +1,39 @@
+---
+- name: Create Azure SQL server and database for container workload demo
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  collections:
+    - azure.azcollection
+  vars_files:
+    - vars/container_workload_defaults.yml
+  tasks:
+    - name: Ensure resource group exists
+      azure.azcollection.azure_rm_resourcegroup:
+        name: "{{ container_workload_resource_group_name }}"
+        location: "{{ container_workload_region }}"
+
+    - name: Create SQL server
+      azure.azcollection.azure_rm_sqlserver:
+        resource_group: "{{ container_workload_resource_group_name }}"
+        name: "{{ aca_sql_server_name }}"
+        location: "{{ container_workload_region }}"
+        admin_username: "{{ aca_sql_admin_username }}"
+        admin_password: "{{ aca_sql_admin_password }}"
+        version: "12.0"
+        minimal_tls_version: "1.2"
+
+    - name: Create SQL database
+      azure.azcollection.azure_rm_sqldatabase:
+        resource_group: "{{ container_workload_resource_group_name }}"
+        server_name: "{{ aca_sql_server_name }}"
+        name: "{{ aca_sql_database_name }}"
+        edition: basic
+
+    - name: Allow Azure services to reach SQL (demo convenience)
+      azure.azcollection.azure_rm_sqlfirewallrule:
+        resource_group: "{{ container_workload_resource_group_name }}"
+        server_name: "{{ aca_sql_server_name }}"
+        name: AllowAzureServices
+        start_ip_address: 0.0.0.0
+        end_ip_address: 0.0.0.0

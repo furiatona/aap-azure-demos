@@ -1,0 +1,116 @@
+---
+- name: Import runtime image to ACR and deploy Container Apps (ARM)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  collections:
+    - azure.azcollection
+  vars_files:
+    - vars/container_workload_defaults.yml
+  vars:
+    # Paths relative to this playbook file (AAP-friendly when playbook path is project/03_*.yml)
+    demo_index_template: templates/container_workload/demo_index.html.j2
+    arm_template_path: templates/container_workload/arm_container_app.json.j2
+  tasks:
+    - name: Ensure resource group exists
+      azure.azcollection.azure_rm_resourcegroup:
+        name: "{{ container_workload_resource_group_name }}"
+        location: "{{ container_workload_region }}"
+
+    - name: Build demo HTML from template
+      ansible.builtin.set_fact:
+        demo_html: "{{ lookup('template', demo_index_template) }}"
+
+    - name: Base64-encode page for Container App secret
+      ansible.builtin.set_fact:
+        page_b64: "{{ demo_html | b64encode }}"
+
+    - name: Import image, deploy ARM, and capture FQDN (skipped in check mode)
+      when: not ansible_check_mode
+      block:
+        - name: Import python image into ACR (requires Azure CLI logged in)
+          ansible.builtin.command:
+            argv:
+              - az
+              - acr
+              - import
+              - "--name"
+              - "{{ aca_acr_name }}"
+              - "--source"
+              - "docker.io/library/python:3.12-alpine"
+              - "--image"
+              - "{{ aca_acr_repository }}:{{ aca_acr_image_tag }}"
+              - "--force"
+          register: aca_import
+          changed_when: aca_import.rc == 0
+          failed_when: false
+
+        - name: Fail with hint when ACR import did not succeed
+          ansible.builtin.fail:
+            msg: >-
+              Azure CLI could not import docker.io/library/python:3.12-alpine into {{ aca_acr_name }}.
+              Install the Azure CLI, run 'az login', and re-run this playbook. CLI stderr: {{ aca_import.stderr | default('') }}
+          when: aca_import.rc != 0
+
+        - name: Load ARM template for Log Analytics, Container Apps environment, and app
+          ansible.builtin.set_fact:
+            aca_arm_template: "{{ lookup('template', arm_template_path) | from_json }}"
+
+        - name: Deploy Container Apps stack via ARM
+          azure.azcollection.azure_rm_deployment:
+            resource_group: "{{ container_workload_resource_group_name }}"
+            name: "{{ aca_arm_deployment_name }}"
+            location: "{{ container_workload_region }}"
+            deployment_mode: incremental
+            template: "{{ aca_arm_template }}"
+            parameters:
+              location:
+                value: "{{ container_workload_region }}"
+              workspaceName:
+                value: "{{ aca_log_analytics_name }}"
+              environmentName:
+                value: "{{ aca_container_apps_env_name }}"
+              appName:
+                value: "{{ aca_container_app_name }}"
+              acrName:
+                value: "{{ aca_acr_name }}"
+              imageRepository:
+                value: "{{ aca_acr_repository }}"
+              imageTag:
+                value: "{{ aca_acr_image_tag }}"
+              pageContentB64:
+                value: "{{ page_b64 }}"
+          register: aca_deploy
+
+        - name: Normalize ARM deployment outputs
+          ansible.builtin.set_fact:
+            aca_outputs: "{{ aca_deploy.deployment.outputs | default({}) }}"
+
+        - name: Resolve Container App FQDN from deployment output
+          ansible.builtin.set_fact:
+            aca_app_fqdn: "{{ aca_outputs.get('containerAppFqdn', {}).get('value', '') }}"
+
+        - name: Fail when deployment did not return Container App FQDN
+          ansible.builtin.fail:
+            msg: >-
+              ARM deployment finished but output containerAppFqdn is missing or empty.
+              Inspect the deployment {{ aca_arm_deployment_name }} in Azure Portal.
+          when: aca_app_fqdn | default('', true) | length == 0
+
+        - name: Show Container App URL
+          ansible.builtin.debug:
+            msg: "Container App (direct): https://{{ aca_app_fqdn }}"
+
+        - name: Publish FQDN to Ansible Automation Platform job stats (optional)
+          ansible.builtin.set_stats:
+            data:
+              container_app_fqdn: "{{ aca_app_fqdn }}"
+              container_app_url: "https://{{ aca_app_fqdn }}"
+            per_host: false
+
+    - name: Check mode — describe work that would run
+      ansible.builtin.debug:
+        msg: >-
+          Check mode: would run az acr import and ARM deployment {{ aca_arm_deployment_name }}
+          (skipped; no Azure changes made).
+      when: ansible_check_mode
