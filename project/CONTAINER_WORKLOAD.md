@@ -24,8 +24,8 @@ Workflow job templates can call these playbooks in order later; this document on
 | 03 | `03_create_container_apps_sample.yml` | `az acr import` (default: **ECR Public** mirror of `library/python`, not Docker Hub) + ARM: Log Analytics, Container Apps env, app |
 | 04 | `04_create_front_door_standard.yml` | Azure Front Door Standard profile, endpoint, origin (HTTPS to the app), default route |
 | 05 | `05_send_ntfy_deployment_url.yml` | POSTs the Front Door HTTPS URL to [ntfy](https://ntfy.sh) (default topic `rh-azure-aca-deployment`); optional after **04** |
-| 10 | `10_azure_storage_visibility_report.yml` | Lists storage accounts in one resource group, renders HTML, uploads to Blob (optional); `set_stats` publishes `report_url` for workflows |
-| 11 | `11_send_ntfy_report_url.yml` | POSTs `report_url` to ntfy (default topic `rh-azure-cloud-report`); run after **10** in a workflow or pass `-e report_url=...` |
+| 10 | `10_azure_storage_visibility_report.yml` | Lists storage accounts in one RG, renders HTML on the controller; `set_stats` publishes **Front Door** `report_url` (playbook **04**) and `report_local_path` |
+| 11 | `11_send_ntfy_report_url.yml` | POSTs `report_url` (usually Front Door) and optional `report_local_path` to ntfy; run after **10** or pass `-e report_url=...` |
 | 99 | `99_destroy_workload_resource_group.yml` | Deletes the whole resource group |
 
 Run from the **repository root** (`azure-demos/`) so paths match Ansible Runner conventions, for example:
@@ -80,7 +80,7 @@ Reusable task files live under `project/tasks/`: **`ntfy_send.yml`** (generic `c
 
 For **Automation Controller / AAP** (job template, credential, workflow node, network), see **`JOB_WORKFLOW.md`** → section **“AAP: ntfy (playbook 05)”**.
 
-**Azure storage visibility (10–11):** Defaults live in `project/vars/azure_visibility_defaults.yml`. Playbook **10** uploads the HTML to a **private** blob container (no anonymous access), then builds a **read-only SAS URL** via `project/scripts/generate_blob_read_sas.py` (needs **`azure-storage-blob`** in the execution environment, same as `azure_rm_storageblob`). SAS lifetime is **`azure_visibility_sas_validity_hours`** (default 168). Blob upload still defaults to **`azure_visibility_blob_auth_mode: key`**. If the account **disables shared key access**, you must extend the playbook (e.g. user-delegation SAS) or set **`azure_visibility_publish_report`** false and host the file elsewhere.
+**Azure storage visibility (10–11):** Defaults live in `project/vars/azure_visibility_defaults.yml` and (for Front Door) `project/vars/container_workload_defaults.yml`. Playbook **10** writes the HTML table to **`azure_visibility_report_local_path`** on the execution node and sets **`report_url`** in **`set_stats`** to the **Front Door HTTPS URL** from playbook **04** (demo entry point), so **11** can ntfy the same style of link as playbook **05**. The visibility HTML is **not** served by that URL until you host it on the app or elsewhere; ntfy also includes **`report_local_path`** when present so operators know where the file landed on the controller.
 
 ## Teardown
 

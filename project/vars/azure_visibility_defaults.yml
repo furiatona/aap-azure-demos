@@ -1,21 +1,15 @@
 ---
 # Defaults for playbooks 10 (Azure storage visibility HTML report) and 11 (ntfy URL).
-# Align with your subscription: resource group and storage account used to host the HTML blob.
 
+# Resource group scanned for storage accounts (often same as container workload RG).
 azure_visibility_resource_group_name: "aca-ansible-demo-rg"
-# Storage account that receives the uploaded report (demo default matches 01_create_storage_and_acr).
-azure_visibility_report_storage_account_name: "acaansibledemo001"
-azure_visibility_report_container_name: "cloud-visibility-reports"
-azure_visibility_report_blob_name: "index.html"
-# Local path before upload (controller/EE filesystem).
+
+# Local path on the execution environment (HTML table of storage accounts).
 azure_visibility_report_local_path: "/tmp/azure_cloud_report.html"
-# When true, upload blob and set_stats report_url.
-azure_visibility_publish_report: true
-# Blob data-plane auth: key = account key (needs Microsoft.Storage/storageAccounts/listKeys/action on the account;
-# typical for Contributor on the RG). login = Entra ID (needs Storage Blob Data Contributor on the account).
-azure_visibility_blob_auth_mode: key
-# Read SAS lifetime for the report URL (hours). Shorter is safer if URLs are shared in chat.
-azure_visibility_sas_validity_hours: 168
+
+# When true, set_stats report_url is the Front Door URL (vars from container_workload_defaults.yml).
+# When false, pass -e report_url=... before playbook 10 completes the set_fact step, or chain only 11 with -e report_url.
+azure_visibility_use_front_door_url: true
 
 # Default ntfy topic for playbook 11 (override with -e ntfy_topic=...).
 azure_visibility_ntfy_topic: "rh-azure-cloud-report"

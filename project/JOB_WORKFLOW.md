@@ -68,7 +68,7 @@ To send the **Front Door HTTPS URL** to **ntfy** (`ntfy.sh/rh-azure-aca-deployme
 
 ### Optional: storage visibility report (10–11)
 
-Separate from the container workload sequence: **10** builds an HTML report of storage accounts in a resource group and can upload it to Blob Storage; **11** sends the resulting **HTTPS URL** to ntfy (same `tasks/ntfy_send.yml` pattern as **05**). In AAP, chain **11** after **10** on success; **10** uses `set_stats` with `report_url` so the next job receives it as an extra variable. Configure `project/vars/azure_visibility_defaults.yml` and ensure outbound HTTPS to **ntfy.sh** for **11**.
+Separate from the container workload sequence: **10** builds an HTML report of storage accounts on the execution node and `set_stats` **`report_url`** as the **Front Door** URL (playbook **04**); **11** posts that link (and optional local path) to ntfy (`tasks/ntfy_send.yml`, same pattern as **05**). In AAP, chain **11** after **10** on success. Configure `project/vars/azure_visibility_defaults.yml` plus Front Door names in `container_workload_defaults.yml`, and allow HTTPS egress to **ntfy.sh** for **11**.
 
 ---
 
