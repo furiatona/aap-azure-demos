@@ -1,0 +1,19 @@
+---
+# Publish a plain-text message to an ntfy topic (same as: curl -d "body" ntfy.sh/topic).
+#
+# Required (set on the play or pass via include_tasks vars):
+#   ntfy_server   — host only, e.g. ntfy.sh (HTTPS is always used)
+#   ntfy_topic    — topic path segment, e.g. rh-azure-aca-deployment
+#   ntfy_message  — request body (string)
+#
+# Optional:
+#   ntfy_title    — if set and non-empty, sent as the "Title" header
+#
+- name: Publish message to ntfy
+  ansible.builtin.uri:
+    url: "https://{{ ntfy_server }}/{{ ntfy_topic }}"
+    method: POST
+    body: "{{ ntfy_message }}"
+    body_format: raw
+    status_code: [200, 204]
+    headers: "{{ {'Title': ntfy_title} if (ntfy_title is defined and ntfy_title | length > 0) else {} }}"

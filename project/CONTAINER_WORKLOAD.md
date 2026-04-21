@@ -23,6 +23,7 @@ Workflow job templates can call these playbooks in order later; this document on
 | 02 | `02_create_azure_sql.yml` | Azure SQL logical server, Basic database, firewall rule for Azure services |
 | 03 | `03_create_container_apps_sample.yml` | `az acr import` (default: **ECR Public** mirror of `library/python`, not Docker Hub) + ARM: Log Analytics, Container Apps env, app |
 | 04 | `04_create_front_door_standard.yml` | Azure Front Door Standard profile, endpoint, origin (HTTPS to the app), default route |
+| 05 | `05_send_ntfy_deployment_url.yml` | POSTs the Front Door HTTPS URL to [ntfy](https://ntfy.sh) (default topic `rh-azure-aca-deployment`); optional after **04** |
 | 99 | `99_destroy_workload_resource_group.yml` | Deletes the whole resource group |
 
 Run from the **repository root** (`azure-demos/`) so paths match Ansible Runner conventions, for example:
@@ -59,6 +60,23 @@ Important names:
 ## Front Door and “firewall”
 
 Playbook **04** uses **Azure Front Door Standard** (`standard_azurefrontdoor` on a CDN profile). The CDN **profile** must be created with **`location: global`** (required by that SKU; it still lives in your resource group). **Web Application Firewall** policies are a **Premium** concern; this sample does not attach a WAF policy so the template stays small. You can extend playbook 04 later with `azure_rm_afdruleset` and related modules if you move to Premium.
+
+### “Page not found” on a new `*.azurefd.net` URL
+
+If the browser shows Azure’s message that the **Front Door configuration could not be found**, work through this list (often more than one applies during rollout):
+
+1. **Edge propagation** — New Standard/Premium endpoints can take **many minutes** (occasionally longer) before every PoP serves your profile. Try again later, another browser profile, or another network to rule out a single edge path.
+2. **Endpoint deployment status** — In the portal, open the Front Door **endpoint** and confirm provisioning is **Succeeded**. From a shell with Azure CLI:  
+   `az afd endpoint show --resource-group <rg> --profile-name <profile> --endpoint-name <endpoint> --query "{hostName:hostName,deploymentStatus:deploymentStatus}" -o yaml`
+3. **Direct Container App URL** — Open `https://<value of containerAppFqdn from 03>` in a browser. If that fails, fix the app first; Front Door cannot fix an unreachable origin.
+4. **Origin health** — In the portal, check the **origin group** health and probe results. Playbook **04** uses **`aca_frontdoor_health_probe_request_type`** (default **GET**) for the HTTPS probe on **`/`**; override to `HEAD` in extravars if your app requires it.
+5. **Route on default hostname** — Confirm a route exists with **`/*`**, **link to default domain** enabled, and the correct **origin group** (names in `container_workload_defaults.yml`).
+
+### Notifications (ntfy)
+
+Reusable task files live under `project/tasks/`: **`ntfy_send.yml`** (generic `curl -d` equivalent over HTTPS) and **`front_door_set_url_facts.yml`** (reads the endpoint hostname from Azure). Playbook **05** wires them together; other playbooks can `include_tasks` the same files with their own `ntfy_message` or after setting `front_door_url` from a survey.
+
+For **Automation Controller / AAP** (job template, credential, workflow node, network), see **`JOB_WORKFLOW.md`** → section **“AAP: ntfy (playbook 05)”**.
 
 ## Teardown
 

@@ -64,7 +64,8 @@
           probe_interval_in_seconds: 100
           probe_path: /
           probe_protocol: Https
-          probe_request_type: HEAD
+          # GET tends to match real client behavior; some origins mishandle HEAD on /.
+          probe_request_type: "{{ aca_frontdoor_health_probe_request_type }}"
         load_balancing_settings:
           sample_size: 4
           successful_samples_required: 3

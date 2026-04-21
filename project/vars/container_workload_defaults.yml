@@ -1,5 +1,5 @@
 ---
-# Shared defaults for container workload playbooks (00–04, 99).
+# Shared defaults for container workload playbooks (00–05, 99).
 # Override in env/extravars or with -e @extra.yml
 
 container_workload_resource_group_name: "aca-ansible-demo-rg"
@@ -24,6 +24,8 @@ aca_frontdoor_endpoint_name: "aca-demo-endpoint"
 aca_frontdoor_origin_group_name: "aca-demo-aca-origin"
 aca_frontdoor_origin_name: "aca-backend"
 aca_frontdoor_route_name: "aca-demo-route"
+# Origin group health probe: GET or HEAD (Azure module choices).
+aca_frontdoor_health_probe_request_type: GET
 
 aca_arm_deployment_name: "aca-sample-stack"
 

@@ -8,7 +8,7 @@ For playbook details and variables, see `CONTAINER_WORKLOAD.md`.
 
 ## Checked: your AAP Workflow Visualizer
 
-Compared to the diagram and rules below, a Controller workflow that looks like **Start → Project sync (Run always) → Approval → 00 → [01 ∥ 02] → 03 → 04 → Delete approval → 99** is **correct** for this repo **if** the convergent node is configured as below.
+Compared to the diagram and rules below, a Controller workflow that looks like **Start → Project sync (Run always) → Approval → 00 → [01 ∥ 02] → 03 → 04 → (optional 05) → End** is **correct** for this repo **if** the convergent node is configured as below.
 
 | Piece | Check |
 |--------|--------|
@@ -17,7 +17,7 @@ Compared to the diagram and rules below, a Controller workflow that looks like *
 | **00** then **01** and **02** in parallel, **Run on success** | Matches the only safe parallel slice (both need only the resource group). |
 | **Convergence on node `03` = All (required)** | Automation controller defaults convergent nodes to **Convergence: Any**. For this stack you must set the **`03` workflow node** to **Convergence: All** so **`03` runs only after both `01` and `02` succeed**. With **Any**, `03` can be eligible to run as soon as **one** parallel parent meets the edge rule, which can start the Container Apps job **before ACR exists** (if SQL finished first) or before SQL exists—both are wrong for this design. In the Workflow Visualizer, an **All** node is labeled **ALL**. |
 | **03** then **04**, sequential | Correct: **04** needs the ARM deployment output from **03**. |
-| **Delete approval** then **99** | Valid for **throwaway demos**: approvers **deny** to keep the environment, **approve** only when you intend to tear down the whole resource group. For long-lived environments, prefer moving **99** to a **separate workflow** so a successful provision never sits one approval away from destroy. |
+| **04** then **05** (optional) | **05** posts the Front Door URL to ntfy. See [AAP: ntfy (playbook 05)](#aap-ntfy-playbook-05) below. |
 
 Full path (aligned with the Visualizer), including **Run always** on project sync:
 
@@ -31,8 +31,8 @@ flowchart TB
   JT02[["JT: 02 Azure SQL"]]
   JT03[["JT: 03 Container Apps<br/><b>Convergence: All</b>"]]
   JT04[["JT: 04 Front Door"]]
-  APD[["Approval: delete"]]
-  JT99[["JT: 99 destroy RG"]]
+  JT05[["JT: 05 ntfy URL<br/><i>optional</i>"]]
+  END((End))
   START --> PS
   PS --> AP1
   AP1 --> JT00
@@ -41,9 +41,30 @@ flowchart TB
   JT01 --> JT03
   JT02 --> JT03
   JT03 --> JT04
-  JT04 --> APD
-  APD --> JT99
+  JT04 --> END
+  JT04 -.->|optional| JT05
+  JT05 -.->|optional| END
 ```
+
+---
+
+## AAP: ntfy (playbook 05)
+
+To send the **Front Door HTTPS URL** to **ntfy** (`ntfy.sh/rh-azure-aca-deployment` by default):
+
+1. **Job template** — Create a template that runs playbook `project/05_send_ntfy_deployment_url.yml` (same **Project** and **Inventory** with `localhost` as for **00–04**).
+2. **Credential** — Use the same **Microsoft Azure Resource Manager** credential as the other Azure playbooks. Playbook **05** calls `azure_rm_afdendpoint` to read the endpoint hostname when **`front_door_url`** is not passed in extra vars.
+3. **Execution environment** — Same image as **04** (needs `azure.azcollection`). The EE (or instance group network path) must allow **outbound HTTPS to `ntfy.sh`** (TCP 443). Corporate proxies may require an allowlist entry.
+4. **Workflow** — Add a node **after** **04** on **On success**, pointing to the **05** job template. Omit this node if you do not want ntfy.
+5. **Extra variables (optional)** — Override defaults without editing Git, for example:
+   - `ntfy_topic` — default `rh-azure-aca-deployment`
+   - `ntfy_server` — default `ntfy.sh` (host only; the playbook always uses `https://`)
+   - `ntfy_title` — optional notification title header
+   - `front_door_url` — if set (e.g. from a survey), **05** skips the Azure read and posts this string as the body (useful if Azure API access is restricted on a dedicated notification template).
+
+**Survey:** Not required for the default flow (URL is resolved from Azure). Add a survey only if operators must paste a URL or override the topic per run.
+
+**Teardown:** Run `project/99_destroy_workload_resource_group.yml` from a **separate workflow** (and job template), with RBAC limited to who may destroy the resource group.
 
 ---
 
@@ -92,11 +113,12 @@ flowchart TB
 ## Parallel execution
 
 | After step | Can run in parallel? | Notes |
-|------------|----------------------|--------|
+|------------|----------------------|-------|
 | **00** | **Yes — 01 and 02** | Both only require the resource group. No shared state between them in Azure beyond the same `resource_group_name`. |
 | **01 + 02** → **03** | **No** | **03** needs **ACR** from **01**. In AAP, set the **`03` workflow node** to **Convergence: All** so **03** waits for **both** parents (not default **Any**). |
 | **03** → **04** | **No** | **04** reads the ARM deployment output for the Container App FQDN created in **03**. |
-| **99** (destroy) | **Never parallel** with **00–04** | Do not run **99** alongside provision nodes. Either use a **separate workflow** for teardown, or (as in a typical demo) chain **99** after **04** behind a **Delete approval** so the default is “deny” unless you explicitly want the resource group removed. |
+| **04** → **05** | **No** (optional **05**) | **05** is notification only; chain after **04** if your EE can reach **ntfy.sh**. |
+| **99** (destroy) | **Separate workflow** | Do not chain **99** in the provision workflow. Use another workflow and job template for teardown so a routine provision run never ends in destroy. |
 
 **Summary:** The only **parallel** slice in the provision path is **Job Template 01** and **Job Template 02** immediately after **00**. Everything else is strictly sequential.
 
@@ -111,9 +133,8 @@ flowchart TB
    - `project/02_create_azure_sql.yml`
 4. **Node:** `project/03_create_container_apps_sample.yml` — edit this node in the Visualizer and set **Convergence** to **All** so it runs only after **both** **01** and **02** succeed (node shows **ALL** in the graph).
 5. **Node:** `project/04_create_front_door_standard.yml`.
-6. **End** → optional **Notification** template, **Job slicing** off (N/A here), or export **Analytics** / **Event** stream for SIEM.
-
-**Teardown:** Either (a) a **second workflow** with only `project/99_destroy_workload_resource_group.yml` plus **RBAC**, or (b) the same workflow after **04** with a **Delete approval** node immediately before **99** (as in your Visualizer)—option (b) is fine for labs if operators know to **reject** the delete step to retain the stack.
+6. **Optional node:** `project/05_send_ntfy_deployment_url.yml` — posts the Front Door URL to ntfy (see [AAP: ntfy (playbook 05)](#aap-ntfy-playbook-05)).
+7. **End** → optional **Notification** template, **Job slicing** off (N/A here), or export **Analytics** / **Event** stream for SIEM.
 
 ---
 

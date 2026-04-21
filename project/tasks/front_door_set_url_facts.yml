@@ -1,0 +1,21 @@
+---
+# Resolve Front Door public URL from an existing Standard/Premium AFD endpoint.
+# Sets facts: aca_front_door_hostname, front_door_url (https://…)
+#
+# Expects vars from vars/container_workload_defaults.yml (or equivalent):
+#   container_workload_resource_group_name
+#   aca_frontdoor_profile_name
+#   aca_frontdoor_endpoint_name
+#
+- name: Read Azure Front Door endpoint hostname
+  azure.azcollection.azure_rm_afdendpoint:
+    resource_group: "{{ container_workload_resource_group_name }}"
+    profile_name: "{{ aca_frontdoor_profile_name }}"
+    name: "{{ aca_frontdoor_endpoint_name }}"
+    state: present
+  register: afd_endpoint_resolve
+
+- name: Set Front Door URL facts for notifications or later tasks
+  ansible.builtin.set_fact:
+    aca_front_door_hostname: "{{ afd_endpoint_resolve.host_name }}"
+    front_door_url: "https://{{ afd_endpoint_resolve.host_name }}"

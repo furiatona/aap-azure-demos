@@ -1,0 +1,40 @@
+---
+# Send the Front Door HTTPS URL to ntfy (default topic: rh-azure-aca-deployment).
+#
+# Reuse from other playbooks:
+#   - ansible.builtin.include_tasks: tasks/ntfy_send.yml
+#     vars:
+#       ntfy_server: ntfy.sh
+#       ntfy_topic: your-topic
+#       ntfy_message: "any string"
+#       ntfy_title: "Optional title"
+#
+# Optional Front Door resolution (same defaults as 04):
+#   ansible.builtin.include_tasks: tasks/front_door_set_url_facts.yml
+#
+# Extra vars / survey:
+#   front_door_url — if set, skips Azure lookup (e.g. paste from job 04 output or workflow artifact)
+#   ntfy_server    — default ntfy.sh
+#   ntfy_topic     — default rh-azure-aca-deployment
+#   ntfy_title     — default "Azure ACA demo — Front Door URL"
+#
+- name: Notify ntfy with Front Door URL
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  collections:
+    - azure.azcollection
+  vars_files:
+    - vars/container_workload_defaults.yml
+  tasks:
+    - name: Resolve Front Door URL from Azure when not supplied
+      ansible.builtin.include_tasks: tasks/front_door_set_url_facts.yml
+      when: front_door_url is not defined or (front_door_url | default('') | length == 0)
+
+    - name: Send ntfy notification with Front Door URL
+      ansible.builtin.include_tasks: tasks/ntfy_send.yml
+      vars:
+        ntfy_server: "{{ ntfy_server | default('ntfy.sh') }}"
+        ntfy_topic: "{{ ntfy_topic | default('rh-azure-aca-deployment') }}"
+        ntfy_message: "{{ front_door_url }}"
+        ntfy_title: "{{ ntfy_title | default('Azure ACA demo — Front Door URL') }}"
