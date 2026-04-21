@@ -80,7 +80,7 @@ Reusable task files live under `project/tasks/`: **`ntfy_send.yml`** (generic `c
 
 For **Automation Controller / AAP** (job template, credential, workflow node, network), see **`JOB_WORKFLOW.md`** → section **“AAP: ntfy (playbook 05)”**.
 
-**Azure storage visibility (10–11):** Defaults live in `project/vars/azure_visibility_defaults.yml`. Playbook **10** needs the same Azure credential as other modules plus **Storage Blob Data Contributor** (or equivalent) on the target storage account when `azure_visibility_publish_report` is true. The uploaded HTML uses **anonymous blob read** for a simple URL in demos; tighten for production.
+**Azure storage visibility (10–11):** Defaults live in `project/vars/azure_visibility_defaults.yml`. For blob upload, **10** defaults to **`azure_visibility_blob_auth_mode: key`** (uses the storage account key via `listKeys`), which usually matches the same service principal that already has **Contributor** on the resource group from playbooks **00–01**. If the storage account **disables shared key access**, switch to **`azure_visibility_blob_auth_mode: login`** and grant **Storage Blob Data Contributor** on that account. The uploaded HTML uses **anonymous blob read** for a simple URL in demos; tighten for production.
 
 ## Teardown
 

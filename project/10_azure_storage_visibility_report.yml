@@ -4,6 +4,9 @@
 #
 # Publish: uploads HTML to Blob Storage so playbook 11 (or humans) can share a stable HTTPS URL.
 # Lab default uses a blob container with anonymous read at the blob level (public_access: blob).
+# Blob upload uses auth_mode key (account key via listKeys) so the same SP as playbook 01
+# (Contributor on the RG) usually works. If the account disables shared key access, set
+# azure_visibility_blob_auth_mode: login and grant Storage Blob Data Contributor on the account.
 # For production, prefer private blobs + SAS and adjust this playbook later.
 #
 # Extra vars: override any key from vars/azure_visibility_defaults.yml
@@ -50,7 +53,7 @@
         content_type: "text/html; charset=utf-8"
         public_access: blob
         force: true
-        auth_mode: login
+        auth_mode: "{{ azure_visibility_blob_auth_mode }}"
 
     - name: Set public report URL fact
       when: azure_visibility_publish_report | bool and not ansible_check_mode
