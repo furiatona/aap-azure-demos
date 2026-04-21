@@ -142,6 +142,73 @@
     }
     footer a { color: var(--azure); text-decoration: none; }
     footer a:hover { text-decoration: underline; }
+    .arch-map-note {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin: 0 0 1.1rem;
+      max-width: 42em;
+    }
+    .arch-svg-wrap {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: 10px;
+      background: linear-gradient(180deg, #fafafa 0%, #fff 40%);
+      border: 1px solid var(--border);
+      padding: 0.5rem 0.25rem 0.75rem;
+    }
+    .arch-svg-wrap svg {
+      display: block;
+      width: min(100%, 720px);
+      height: auto;
+      margin: 0 auto;
+    }
+    .arch-legend {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin: 0.85rem 0 0;
+      text-align: center;
+      font-style: italic;
+    }
+    @keyframes arch-flow-shift {
+      to { stroke-dashoffset: -40; }
+    }
+    .arch-flow-line {
+      stroke-dasharray: 10 8;
+      animation: arch-flow-shift 1.05s linear infinite;
+    }
+    @keyframes arch-dash-drift {
+      to { stroke-dashoffset: -22; }
+    }
+    .arch-dash-flow {
+      animation: arch-dash-drift 2.8s linear infinite;
+    }
+    @keyframes arch-bulb-pulse {
+      0%, 100% { opacity: 1; fill: #00bcf2; }
+      50% { opacity: 0.2; fill: #0078d4; }
+    }
+    .arch-endpoint-bulb {
+      animation: arch-bulb-pulse 1.65s ease-in-out infinite;
+    }
+    @keyframes arch-app-soft {
+      0%, 100% { opacity: 0.55; }
+      50% { opacity: 1; }
+    }
+    .arch-app-glow {
+      animation: arch-app-soft 2.2s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .arch-flow-line,
+      .arch-dash-flow,
+      .arch-endpoint-bulb,
+      .arch-app-glow {
+        animation: none !important;
+      }
+      .arch-flow-line {
+        stroke-dasharray: unset;
+        stroke-dashoffset: 0;
+      }
+    }
   </style>
 </head>
 <body>
@@ -174,47 +241,124 @@
     </section>
 
     <section class="hero-card">
+      <h2><span class="dot"></span>Architecture map (schematic)</h2>
+      <p class="arch-map-note">
+        Solid arrows show the <strong>request path</strong> users follow when Front Door is enabled.
+        Dashed lines are <strong>not live app dependencies</strong> for this sample HTML—they only show resources
+        Ansible provisioned together in the same demo stack (your real app would wire SQL, storage, etc. as you design).
+      </p>
+      <div class="arch-svg-wrap">
+        <svg viewBox="0 0 720 300" role="img" aria-labelledby="archTitle archDesc" xmlns="http://www.w3.org/2000/svg">
+          <title id="archTitle">Azure demo workload traffic and resources</title>
+          <desc id="archDesc">
+            Clients connect over HTTPS to Azure Front Door Standard, which forwards to an Azure Container Apps workload.
+            Azure Container Registry, Azure SQL, and a storage account are shown as related platform resources for this demo.
+          </desc>
+          <defs>
+            <marker id="arrowSolid" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L9,3 z" fill="#0078d4" />
+            </marker>
+            <marker id="arrowDash" markerWidth="8" markerHeight="8" refX="7" refY="2.5" orient="auto">
+              <path d="M0,0 L0,5 L7,2.5 z" fill="#8a8580" />
+            </marker>
+          </defs>
+
+          <!-- Row: traffic path -->
+          <rect x="24" y="42" width="100" height="52" rx="10" fill="#fff" stroke="#c4bfb6" stroke-width="1.5" />
+          <text x="74" y="66" text-anchor="middle" font-family="Red Hat Text, system-ui, sans-serif" font-size="13" font-weight="600" fill="#151515">Clients</text>
+          <text x="74" y="82" text-anchor="middle" font-family="Red Hat Text, system-ui, sans-serif" font-size="10" fill="#5c5c5c">HTTPS</text>
+
+          <line class="arch-flow-line" x1="128" y1="68" x2="168" y2="68" stroke="#0078d4" stroke-width="2" marker-end="url(#arrowSolid)" />
+
+          <rect x="172" y="28" width="168" height="80" rx="12" fill="#e8f4fc" stroke="#0078d4" stroke-width="1.75" />
+          <!-- Pulsing endpoint indicator on the Front Door edge (global entry) -->
+          <circle class="arch-endpoint-bulb" cx="256" cy="36" r="5" fill="#0078d4" stroke="#fff" stroke-width="1" aria-hidden="true" />
+          <text x="256" y="56" text-anchor="middle" font-family="Red Hat Display, system-ui, sans-serif" font-size="14" font-weight="700" fill="#004578">Azure Front Door</text>
+          <text x="256" y="76" text-anchor="middle" font-family="Red Hat Text, system-ui, sans-serif" font-size="11" fill="#004578">Standard · global edge</text>
+          <text x="256" y="94" text-anchor="middle" font-family="Red Hat Text, system-ui, sans-serif" font-size="10" fill="#5c5c5c">Profile: {{ aca_frontdoor_profile_name | e }}</text>
+
+          <line class="arch-flow-line" x1="342" y1="68" x2="388" y2="68" stroke="#0078d4" stroke-width="2" marker-end="url(#arrowSolid)" />
+
+          <rect x="392" y="28" width="200" height="80" rx="12" fill="#fff" stroke="#ee0000" stroke-width="1.5" />
+          <!-- Soft pulse on compute box (ingress target) -->
+          <circle class="arch-app-glow" cx="492" cy="36" r="4" fill="#ee0000" opacity="0.45" aria-hidden="true" />
+          <text x="492" y="56" text-anchor="middle" font-family="Red Hat Display, system-ui, sans-serif" font-size="14" font-weight="700" fill="#151515">Container Apps</text>
+          <text x="492" y="76" text-anchor="middle" font-family="Red Hat Text, system-ui, sans-serif" font-size="11" fill="#5c5c5c">This page runs here</text>
+          <text x="492" y="94" text-anchor="middle" font-family="Red Hat Text, system-ui, sans-serif" font-size="10" fill="#0d47a1">{{ aca_container_app_name | e }}</text>
+
+          <!-- Dashed: platform footprint (not app data flow for this sample) -->
+          <text x="360" y="138" text-anchor="middle" font-family="Red Hat Text, system-ui, sans-serif" font-size="11" font-weight="600" fill="#8a8580" letter-spacing="0.04em">SAME DEMO STACK (PROVISIONED BY ANSIBLE)</text>
+
+          <path class="arch-dash-flow" d="M 492 110 L 492 150 L 118 150 L 118 168" fill="none" stroke="#b0aba3" stroke-width="1.5" stroke-dasharray="6 5" marker-end="url(#arrowDash)" />
+          <path class="arch-dash-flow" d="M 492 110 L 492 150 L 288 150 L 288 168" fill="none" stroke="#b0aba3" stroke-width="1.5" stroke-dasharray="6 5" marker-end="url(#arrowDash)" />
+          <path class="arch-dash-flow" d="M 492 110 L 492 150 L 458 150 L 458 168" fill="none" stroke="#b0aba3" stroke-width="1.5" stroke-dasharray="6 5" marker-end="url(#arrowDash)" />
+
+          <rect x="58" y="170" width="120" height="56" rx="10" fill="#fff" stroke="#b0aba3" stroke-width="1.5" stroke-dasharray="5 4" />
+          <text x="118" y="194" text-anchor="middle" font-family="Red Hat Text, system-ui, sans-serif" font-size="12" font-weight="600" fill="#151515">ACR</text>
+          <text x="118" y="212" text-anchor="middle" font-family="Red Hat Text, system-ui, sans-serif" font-size="9.5" fill="#5c5c5c">Container images</text>
+
+          <rect x="228" y="170" width="120" height="56" rx="10" fill="#fff" stroke="#b0aba3" stroke-width="1.5" stroke-dasharray="5 4" />
+          <text x="288" y="194" text-anchor="middle" font-family="Red Hat Text, system-ui, sans-serif" font-size="12" font-weight="600" fill="#151515">Azure SQL</text>
+          <text x="288" y="212" text-anchor="middle" font-family="Red Hat Text, system-ui, sans-serif" font-size="9.5" fill="#5c5c5c">Database (demo)</text>
+
+          <rect x="398" y="170" width="120" height="56" rx="10" fill="#fff" stroke="#b0aba3" stroke-width="1.5" stroke-dasharray="5 4" />
+          <text x="458" y="194" text-anchor="middle" font-family="Red Hat Text, system-ui, sans-serif" font-size="12" font-weight="600" fill="#151515">Storage</text>
+          <text x="458" y="212" text-anchor="middle" font-family="Red Hat Text, system-ui, sans-serif" font-size="9.5" fill="#5c5c5c">Account (demo)</text>
+
+          <rect x="538" y="170" width="158" height="56" rx="10" fill="#fff" stroke="#b0aba3" stroke-width="1.5" stroke-dasharray="5 4" />
+          <text x="617" y="194" text-anchor="middle" font-family="Red Hat Text, system-ui, sans-serif" font-size="12" font-weight="600" fill="#151515">Log Analytics</text>
+          <text x="617" y="212" text-anchor="middle" font-family="Red Hat Text, system-ui, sans-serif" font-size="9.5" fill="#5c5c5c">ACA observability</text>
+
+          <path class="arch-dash-flow" d="M 492 110 L 492 150 L 617 150 L 617 168" fill="none" stroke="#b0aba3" stroke-width="1.5" stroke-dasharray="6 5" marker-end="url(#arrowDash)" />
+
+          <text x="360" y="268" text-anchor="middle" font-family="Red Hat Text, system-ui, sans-serif" font-size="10.5" fill="#5c5c5c">Resource group <tspan font-weight="600" fill="#0d47a1">{{ container_workload_resource_group_name | e }}</tspan> · {{ container_workload_region | e }}</text>
+        </svg>
+      </div>
+      <p class="arch-legend">Diagram is illustrative; exact routing and private endpoints depend on your production design. Motion pauses when the browser requests reduced motion.</p>
+    </section>
+
+    <section class="hero-card">
       <h2><span class="dot"></span>Related Azure resources (this demo)</h2>
       <div class="grid">
         <div class="res">
           <label>Resource group</label>
-          <code>{{ container_workload_resource_group_name }}</code>
+          <code>{{ container_workload_resource_group_name | e }}</code>
         </div>
         <div class="res">
           <label>Region</label>
-          <code>{{ container_workload_region }}</code>
+          <code>{{ container_workload_region | e }}</code>
         </div>
         <div class="res">
           <label>Azure Container Registry</label>
-          <code>{{ aca_acr_name }}.azurecr.io</code>
+          <code>{{ aca_acr_name | e }}.azurecr.io</code>
         </div>
         <div class="res">
           <label>Azure SQL server</label>
-          <code>{{ aca_sql_server_name }}.database.windows.net</code>
+          <code>{{ aca_sql_server_name | e }}.database.windows.net</code>
         </div>
         <div class="res">
           <label>Azure SQL database</label>
-          <code>{{ aca_sql_database_name }}</code>
+          <code>{{ aca_sql_database_name | e }}</code>
         </div>
         <div class="res">
           <label>Storage account</label>
-          <code>{{ aca_storage_account_name }}</code>
+          <code>{{ aca_storage_account_name | e }}</code>
         </div>
         <div class="res">
           <label>Log Analytics workspace</label>
-          <code>{{ aca_log_analytics_name }}</code>
+          <code>{{ aca_log_analytics_name | e }}</code>
         </div>
         <div class="res">
           <label>Container Apps environment</label>
-          <code>{{ aca_container_apps_env_name }}</code>
+          <code>{{ aca_container_apps_env_name | e }}</code>
         </div>
         <div class="res">
           <label>Container App</label>
-          <code>{{ aca_container_app_name }}</code>
+          <code>{{ aca_container_app_name | e }}</code>
         </div>
         <div class="res">
           <label>Azure Front Door profile</label>
-          <code>{{ aca_frontdoor_profile_name }}</code>
+          <code>{{ aca_frontdoor_profile_name | e }}</code>
         </div>
       </div>
     </section>
