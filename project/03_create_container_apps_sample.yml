@@ -61,7 +61,7 @@
           changed_when: false
           no_log: true
 
-        - name: Import python image into ACR (uses Azure CLI after login above)
+        - name: Import base image into ACR (retries on upstream 429 rate limits)
           ansible.builtin.command:
             argv:
               - az
@@ -76,16 +76,9 @@
               - "--force"
           register: aca_import
           changed_when: aca_import.rc == 0
-          failed_when: false
-
-        - name: Fail with hint when ACR import did not succeed
-          ansible.builtin.fail:
-            msg: >-
-              Azure CLI could not import {{ aca_image_import_source }} into {{ aca_acr_name }}.
-              If you see Docker Hub TOOMANYREQUESTS / 429, use default aca_image_import_source (ECR Public mirror) or set aca_image_import_source
-              to an authenticated registry. Ensure an Azure RM credential is on the job (AZURE_CLIENT_ID / AZURE_SECRET / AZURE_TENANT) or az login locally.
-              CLI stderr: {{ aca_import.stderr | default('') }}
-          when: aca_import.rc != 0
+          retries: "{{ aca_acr_import_retries | int }}"
+          delay: "{{ aca_acr_import_delay_seconds | int }}"
+          until: aca_import.rc == 0
 
         - name: Load ARM template for Log Analytics, Container Apps environment, and app
           ansible.builtin.set_fact:

@@ -84,7 +84,7 @@
                 "cpu": 0.5,
                 "memory": "1.0Gi"
               },
-              "command": [ "python", "-c" ],
+              "command": [ "python3", "-c" ],
               "args": [
                 "import base64,http.server,os,socketserver as ss;h=base64.b64decode(os.environ['PAGE_B64']).decode('utf-8');open('index.html','w',encoding='utf-8').write(h);os.chdir('.');ss.TCPServer(('',8080),http.server.SimpleHTTPRequestHandler).serve_forever()"
               ],

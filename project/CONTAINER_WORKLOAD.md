@@ -53,7 +53,7 @@ Important names:
 ## Application content
 
 - HTML is rendered from `project/templates/container_workload/demo_index.html.j2` (Red Hat fonts, simple layout, resource table).
-- The Container App runs **`python:3.12-alpine`** in ACR (layers imported from **`aca_image_import_source`**, default `public.ecr.aws/docker/library/python:3.12-alpine` to avoid Docker Hub anonymous rate limits). Startup decodes a **base64** page payload stored as an app **secret** (see ARM template `project/templates/container_workload/arm_container_app.json.j2`).
+- The Container App runs **`python:3.12-bookworm`** in ACR (layers imported from **`aca_image_import_source`**, default **`mcr.microsoft.com/devcontainers/python:1-3.12-bookworm`** to avoid anonymous 429 limits on Docker Hub / ECR Public when ACR pulls the manifest). Import is retried (`aca_acr_import_retries` / `aca_acr_import_delay_seconds`). Startup decodes a **base64** page via **`python3`** (see ARM template `project/templates/container_workload/arm_container_app.json.j2`).
 - The page uses **JavaScript** to show `location.hostname` so you can see whether you hit the app **directly** (`*.azurecontainerapps.io`) or via **Front Door** (`*.azurefd.net`) after playbook 04.
 
 ## Front Door and “firewall”
