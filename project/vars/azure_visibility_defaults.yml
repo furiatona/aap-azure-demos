@@ -1,8 +1,11 @@
 ---
-# Defaults for playbooks 10 (Azure storage visibility) and 11 (ntfy URL).
+# Defaults for playbooks 10 (Azure visibility report) and 11 (ntfy URL).
 
 # Resource group scanned for storage accounts (often same as container workload RG).
 azure_visibility_resource_group_name: "aca-ansible-demo-rg"
+
+# When true, playbook 10 lists every ARM resource in the RG (azure_rm_resource_info) for the HTML inventory table.
+azure_visibility_collect_arm_resources: true
 
 # Local path on the execution environment (HTML table of storage accounts).
 azure_visibility_report_local_path: "/tmp/azure_cloud_report.html"

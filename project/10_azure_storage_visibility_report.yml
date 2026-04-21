@@ -1,12 +1,12 @@
 ---
-# Azure visibility: storage account HTML report + dedicated Container App + Front Door URL.
+# Azure visibility: HTML report (RG inventory + storage detail) + dedicated Container App + Front Door URL.
 #
 # - Renders the report and deploys it to a second ACA (same RG / env as 03) via incremental ARM.
 # - Front Door: new origin group + origin + endpoint + route (does not alter 04's demo origin group).
 #
 # Prerequisites: 00, 01, 03 (ACA env + ACR image), 04 (FD profile on same RG). Playbooks 03–05 unchanged in behavior.
 #
-- name: Azure storage visibility report
+- name: Azure visibility report
   hosts: localhost
   connection: local
   gather_facts: true
@@ -31,6 +31,33 @@
             visibility_storage_facts.azure_storageaccounts
             | default(visibility_storage_facts.storageaccounts | default([]))
           }}
+
+    - name: Collect ARM resource inventory for report
+      when: azure_visibility_collect_arm_resources | default(true) | bool
+      block:
+        - name: List all ARM resources in resource group
+          azure.azcollection.azure_rm_resource_info:
+            resource_group: "{{ azure_visibility_resource_group_name }}"
+            resource_type: resources
+          register: visibility_arm_inventory
+
+        - name: Record ARM inventory for HTML template
+          ansible.builtin.set_fact:
+            azure_visibility_arm_resources: "{{ visibility_arm_inventory.response | default([]) }}"
+      rescue:
+        - name: ARM inventory unavailable (report will omit inventory table)
+          ansible.builtin.set_fact:
+            azure_visibility_arm_resources: []
+
+    - name: Default empty ARM inventory when collection disabled
+      when: azure_visibility_arm_resources is not defined
+      ansible.builtin.set_fact:
+        azure_visibility_arm_resources: []
+
+    - name: Optional subscription id for report header (env AZURE_SUBSCRIPTION_ID)
+      ansible.builtin.set_fact:
+        azure_visibility_subscription_hint: >-
+          {{ lookup('ansible.builtin.env', 'AZURE_SUBSCRIPTION_ID', errors='ignore') | default('', true) }}
 
     - name: Render HTML report locally
       ansible.builtin.template:

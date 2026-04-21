@@ -3,36 +3,236 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Azure storage visibility</title>
+  <title>Azure visibility</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,400;0,600;0,700;1,400&amp;display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer"/>
   <style>
-    body { font-family: system-ui, -apple-system, sans-serif; margin: 2rem; line-height: 1.4; }
-    h1 { font-size: 1.35rem; }
-    table { border-collapse: collapse; width: 100%; max-width: 1100px; margin-top: 1rem; }
-    th, td { border: 1px solid #ccc; padding: 0.45rem 0.65rem; text-align: left; vertical-align: top; }
-    th { background: #f0f0f0; font-weight: 600; }
-    caption { text-align: left; font-weight: 600; margin: 0 0 0.5rem; }
-    .meta { color: #444; font-size: 0.9rem; margin-bottom: 0.25rem; }
-    td.mono { font-family: ui-monospace, monospace; font-size: 0.82rem; word-break: break-all; }
-    a { color: #0066b8; }
+    :root {
+      --azure-blue: #0078d4;
+      --azure-blue-dark: #005a9e;
+      --surface: #f5f6f8;
+      --card: #ffffff;
+      --border: #e1e4e8;
+      --text: #1b1b1b;
+      --muted: #5c5c5c;
+      --accent-bg: #e8f4fc;
+      --radius: 10px;
+      --shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Open Sans", system-ui, -apple-system, sans-serif;
+      color: var(--text);
+      background: var(--surface);
+      line-height: 1.5;
+    }
+    .hero {
+      background: linear-gradient(135deg, var(--azure-blue) 0%, var(--azure-blue-dark) 100%);
+      color: #fff;
+      padding: 2rem 1.5rem 2.25rem;
+      box-shadow: var(--shadow);
+    }
+    .hero-inner { max-width: 1200px; margin: 0 auto; }
+    .hero h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .hero p { margin: 0.25rem 0 0; opacity: 0.92; font-size: 0.95rem; }
+    .wrap { max-width: 1200px; margin: -1.25rem auto 2.5rem; padding: 0 1.25rem; position: relative; }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      padding: 1rem 1.15rem;
+    }
+    .card h2 {
+      margin: 0 0 0.75rem;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--azure-blue-dark);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .card h2 i { opacity: 0.85; font-size: 1rem; }
+    .stat-value { font-size: 1.65rem; font-weight: 700; color: var(--text); line-height: 1.2; }
+    .stat-label { font-size: 0.8rem; color: var(--muted); margin-top: 0.15rem; }
+    .section { margin-bottom: 1.5rem; }
+    .section > .card { padding: 0; overflow: hidden; }
+    .section-header {
+      padding: 1rem 1.15rem;
+      background: var(--accent-bg);
+      border-bottom: 1px solid var(--border);
+    }
+    .section-header h2 { margin: 0; font-size: 1.1rem; color: var(--azure-blue-dark); }
+    .section-header p { margin: 0.35rem 0 0; font-size: 0.88rem; color: var(--muted); }
+    .table-wrap { overflow-x: auto; }
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+    table.data th, table.data td {
+      border-bottom: 1px solid var(--border);
+      padding: 0.55rem 0.85rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    table.data th {
+      background: #fafbfc;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    table.data tbody tr:nth-child(even) { background: #fcfcfd; }
+    table.data tbody tr:hover { background: #f0f7fc; }
+    .mono {
+      font-family: ui-monospace, "Cascadia Code", "Source Code Pro", monospace;
+      font-size: 0.78rem;
+      word-break: break-all;
+    }
+    .type-pill {
+      display: inline-block;
+      max-width: 100%;
+      font-size: 0.78rem;
+      color: var(--azure-blue-dark);
+      background: var(--accent-bg);
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      border: 1px solid #c7e4f8;
+    }
+    .tags-muted { color: var(--muted); font-size: 0.8rem; }
+    a { color: var(--azure-blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    details.card { padding: 0; }
+    details.card summary {
+      cursor: pointer;
+      padding: 0.85rem 1.15rem;
+      font-weight: 600;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    details.card summary::-webkit-details-marker { display: none; }
+    details.card[open] summary { border-bottom: 1px solid var(--border); }
+    footer {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    footer a { color: var(--muted); text-decoration: underline; }
   </style>
 </head>
 <body>
-  <h1>Azure storage visibility</h1>
-  <p class="meta">Resource group: {{ azure_visibility_resource_group_name }}</p>
-  <p class="meta">Generated: {{ ansible_date_time.date | default('') }} {{ ansible_date_time.time | default('') }} (controller time)</p>
-  <table>
-    <caption>Storage accounts in scope</caption>
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Location</th>
-        <th>SKU</th>
-        <th>Kind</th>
-        <th>Access tier</th>
-        <th>Blob endpoint</th>
-      </tr>
-    </thead>
-    <tbody>
+  <header class="hero">
+    <div class="hero-inner">
+      <h1><i class="fa-brands fa-microsoft" aria-hidden="true"></i> Azure visibility</h1>
+      <p>Resource group automation snapshot — Ansible-generated report</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="summary-grid">
+      <div class="card">
+        <h2><i class="fa-solid fa-folder-tree" aria-hidden="true"></i> Scope</h2>
+        <div class="stat-value" style="font-size:1.1rem;">{{ azure_visibility_resource_group_name }}</div>
+        <div class="stat-label">Resource group</div>
+      </div>
+      <div class="card">
+        <h2><i class="fa-solid fa-clock" aria-hidden="true"></i> Generated</h2>
+        <div class="stat-value" style="font-size:1.1rem;">{{ ansible_date_time.date | default('') }}</div>
+        <div class="stat-label">{{ ansible_date_time.time | default('') }} (controller time)</div>
+      </div>
+      <div class="card">
+        <h2><i class="fa-solid fa-layer-group" aria-hidden="true"></i> ARM resources</h2>
+        <div class="stat-value">{{ azure_visibility_arm_resources | length }}</div>
+        <div class="stat-label">In this resource group</div>
+      </div>
+      <div class="card">
+        <h2><i class="fa-solid fa-database" aria-hidden="true"></i> Storage accounts</h2>
+        <div class="stat-value">{{ azure_visibility_storage_accounts | length }}</div>
+        <div class="stat-label">Detected via storage API</div>
+      </div>
+    </div>
+
+{% if azure_visibility_subscription_hint | default('') | length > 0 %}
+    <p class="tags-muted" style="margin: -0.5rem 0 1.25rem;"><i class="fa-solid fa-fingerprint" aria-hidden="true"></i> Subscription hint: <span class="mono">{{ azure_visibility_subscription_hint }}</span></p>
+{% endif %}
+
+    <section class="section">
+      <div class="card">
+        <div class="section-header">
+          <h2><i class="fa-solid fa-list-ul" aria-hidden="true"></i> Resource inventory</h2>
+          <p>All Azure Resource Manager resources in the group (read-only inventory). Types reflect Azure provider namespaces.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="data">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Location</th>
+                <th>Tags</th>
+              </tr>
+            </thead>
+            <tbody>
+{% for r in (azure_visibility_arm_resources | sort(attribute='name')) %}
+{% set tagmap = r.tags | default({}, true) %}
+              <tr>
+                <td><strong>{{ r.name | default('', true) }}</strong></td>
+                <td><span class="type-pill mono" title="{{ r.type | default('', true) }}">{{ r.type | default('', true) }}</span></td>
+                <td>{{ r.location | default('—', true) }}</td>
+                <td class="tags-muted">
+                  {%- if tagmap -%}
+                    {%- for item in tagmap | dict2items -%}
+                      {%- if not loop.first -%}, {% endif -%}{{ item.key }}={{ item.value }}
+                    {%- endfor -%}
+                  {%- else -%}
+                    —
+                  {%- endif -%}
+                </td>
+              </tr>
+{% else %}
+              <tr><td colspan="4">No ARM resources returned (check RBAC or set <span class="mono">azure_visibility_collect_arm_resources: true</span>).</td></tr>
+{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="card">
+        <div class="section-header">
+          <h2><i class="fa-solid fa-hard-drive" aria-hidden="true"></i> Storage accounts (detail)</h2>
+          <p>From storage account API — SKU, kind, access tier, and blob endpoint.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="data">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Location</th>
+                <th>SKU</th>
+                <th>Kind</th>
+                <th>Access tier</th>
+                <th>Blob endpoint</th>
+              </tr>
+            </thead>
+            <tbody>
 {% for a in azure_visibility_storage_accounts %}
 {% set sku = a.sku.name | default(a.account_type | default('', true), true) %}
 {% set tier = a.access_tier | default(a.accessTier | default('', true), true) %}
@@ -43,18 +243,34 @@
 {% else %}
 {% set blob_ep = blob_raw | default('', true) %}
 {% endif %}
-      <tr>
-        <td>{{ a.name | default('', true) }}</td>
-        <td>{{ a.location | default('', true) }}</td>
-        <td>{{ sku }}</td>
-        <td>{{ a.kind | default('', true) }}</td>
-        <td>{{ tier }}</td>
-        <td class="mono">{% if blob_ep %}<a href="{{ blob_ep }}">{{ blob_ep }}</a>{% endif %}</td>
-      </tr>
+              <tr>
+                <td><strong>{{ a.name | default('', true) }}</strong></td>
+                <td>{{ a.location | default('', true) }}</td>
+                <td>{{ sku }}</td>
+                <td>{{ a.kind | default('', true) }}</td>
+                <td>{{ tier }}</td>
+                <td class="mono">{% if blob_ep %}<a href="{{ blob_ep }}">{{ blob_ep }}</a>{% else %}—{% endif %}</td>
+              </tr>
 {% else %}
-      <tr><td colspan="6">No storage accounts returned for this resource group.</td></tr>
+              <tr><td colspan="6">No storage accounts returned for this resource group.</td></tr>
 {% endfor %}
-    </tbody>
-  </table>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <details class="card section">
+      <summary><i class="fa-solid fa-circle-info" aria-hidden="true"></i> About this report</summary>
+      <div style="padding: 1rem 1.15rem; font-size: 0.88rem; color: var(--muted);">
+        <p style="margin:0 0 0.75rem;">This page is produced by Ansible (playbook <span class="mono">10_azure_storage_visibility_report.yml</span>) and served via Azure Container Apps / Front Door for demos. Inventory uses <span class="mono">azure_rm_resource_info</span>; storage rows use <span class="mono">azure_rm_storageaccount_info</span>.</p>
+        <p style="margin:0;">You can extend the playbook with additional <span class="mono">*_info</span> modules (VMs, networking, AKS, etc.) and add sections to this template the same way as the hybrid-cloud AWS report pattern.</p>
+      </div>
+    </details>
+  </main>
+
+  <footer>
+    <p>Built with Red Hat Ansible Automation Platform patterns · <a href="https://docs.ansible.com/ansible/latest/collections/azure/azcollection/azure_rm_resource_info_module.html">Azure collection docs</a></p>
+  </footer>
 </body>
 </html>
