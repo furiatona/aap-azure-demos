@@ -31,7 +31,7 @@
         ntfy_send_server: "{{ ntfy_server | default('ntfy.sh') }}"
         ntfy_send_topic: "{{ ntfy_topic | default(azure_visibility_ntfy_topic) }}"
         ntfy_send_message: "{{ ntfy_message | default(
-          'Your storage visibility report finished. Demo (Front Door): ' ~ report_url
+          'Your storage visibility report finished. Visibility Front Door: ' ~ report_url
           ~ (
             ' | HTML on controller: ' ~ report_local_path
             if (report_local_path is defined and (report_local_path | default('') | length) > 0)

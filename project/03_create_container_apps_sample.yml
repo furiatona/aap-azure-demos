@@ -31,35 +31,7 @@
         # Ansible Azure modules use AAP-injected creds; `az` needs its own login in the job environment.
         # Controller injects AZURE_CLIENT_ID, AZURE_SECRET, AZURE_TENANT, AZURE_SUBSCRIPTION_ID for Azure RM credentials.
         - name: Ensure Azure CLI has a subscription (SP from env or existing session)
-          ansible.builtin.shell: |
-            set -eu
-            if az account show >/dev/null 2>&1; then
-              exit 0
-            fi
-            if [ -n "${AZURE_CLIENT_ID:-}" ] && [ -n "${AZURE_SECRET:-}" ] && [ -n "${AZURE_TENANT:-}" ]; then
-              az login --service-principal \
-                --username "$AZURE_CLIENT_ID" \
-                --password "$AZURE_SECRET" \
-                --tenant "$AZURE_TENANT"
-            elif [ -n "${ARM_CLIENT_ID:-}" ] && [ -n "${ARM_CLIENT_SECRET:-}" ] && [ -n "${ARM_TENANT_ID:-}" ]; then
-              az login --service-principal \
-                --username "$ARM_CLIENT_ID" \
-                --password "$ARM_CLIENT_SECRET" \
-                --tenant "$ARM_TENANT_ID"
-            else
-              echo "Azure CLI has no session and no service principal env vars were found." >&2
-              echo "Expected AZURE_CLIENT_ID, AZURE_SECRET, AZURE_TENANT (AAP Azure RM credential) or ARM_* equivalents." >&2
-              exit 1
-            fi
-            if [ -n "${AZURE_SUBSCRIPTION_ID:-}" ]; then
-              az account set --subscription "$AZURE_SUBSCRIPTION_ID"
-            elif [ -n "${ARM_SUBSCRIPTION_ID:-}" ]; then
-              az account set --subscription "$ARM_SUBSCRIPTION_ID"
-            fi
-          args:
-            executable: /bin/sh
-          changed_when: false
-          no_log: true
+          ansible.builtin.include_tasks: tasks/azure_cli_sp_login.yml
 
         - name: Import base image into ACR (retries on upstream 429 rate limits)
           ansible.builtin.command:

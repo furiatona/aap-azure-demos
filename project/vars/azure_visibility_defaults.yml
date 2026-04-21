@@ -1,5 +1,5 @@
 ---
-# Defaults for playbooks 10 (Azure storage visibility HTML report) and 11 (ntfy URL).
+# Defaults for playbooks 10 (Azure storage visibility) and 11 (ntfy URL).
 
 # Resource group scanned for storage accounts (often same as container workload RG).
 azure_visibility_resource_group_name: "aca-ansible-demo-rg"
@@ -7,8 +7,22 @@ azure_visibility_resource_group_name: "aca-ansible-demo-rg"
 # Local path on the execution environment (HTML table of storage accounts).
 azure_visibility_report_local_path: "/tmp/azure_cloud_report.html"
 
-# When true, set_stats report_url is the Front Door URL (vars from container_workload_defaults.yml).
-# When false, pass -e report_url=... before playbook 10 completes the set_fact step, or chain only 11 with -e report_url.
+# Deploy / update a second Container App (ARM) that serves the visibility HTML (same ACA env as 03).
+# Requires 01 (ACR) + 03 (managed environment + main app image in ACR) first.
+azure_visibility_deploy_container_app: true
+
+# Second Container App (incremental ARM; does not change playbook 03 resources).
+aca_visibility_container_app_name: "aca-visibility-report-app"
+aca_visibility_arm_deployment_name: "aca-visibility-app-deploy"
+
+# Front Door: dedicated endpoint + origin group for the visibility ACA only (playbook 04 profile must exist).
+azure_visibility_frontdoor_origin_group_name: "aca-visibility-fd-origin"
+azure_visibility_frontdoor_origin_name: "aca-visibility-backend"
+azure_visibility_frontdoor_endpoint_name: "aca-visibility-endpoint"
+azure_visibility_frontdoor_route_name: "aca-visibility-route"
+# Endpoint name must be unique in the subscription for the generated hostname label; change if create fails.
+
+# When true, create/update FD routing for the visibility app. When false, pass -e report_url=...
 azure_visibility_use_front_door_url: true
 
 # Default ntfy topic for playbook 11 (override with -e ntfy_topic=...).

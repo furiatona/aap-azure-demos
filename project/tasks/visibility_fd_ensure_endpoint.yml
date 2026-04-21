@@ -1,0 +1,64 @@
+---
+# Dedicated Front Door endpoint + origin group + origin for the visibility Container App only.
+# Does not reuse playbook 04's origin group (demo app). Expects fact aca_visibility_app_fqdn (no https://).
+#
+# Vars: container_workload_defaults.yml, azure_visibility_defaults.yml, aca_frontdoor_profile_name.
+#
+- name: Create Front Door origin group for visibility Container App
+  azure.azcollection.azure_rm_afdorigingroup:
+    resource_group: "{{ container_workload_resource_group_name }}"
+    profile_name: "{{ aca_frontdoor_profile_name }}"
+    name: "{{ azure_visibility_frontdoor_origin_group_name }}"
+    health_probe_settings:
+      probe_interval_in_seconds: 100
+      probe_path: /
+      probe_protocol: Https
+      probe_request_type: "{{ aca_frontdoor_health_probe_request_type }}"
+    load_balancing_settings:
+      sample_size: 4
+      successful_samples_required: 3
+      additional_latency_in_milliseconds: 50
+
+- name: Add visibility Container App as Front Door origin
+  azure.azcollection.azure_rm_afdorigin:
+    resource_group: "{{ container_workload_resource_group_name }}"
+    profile_name: "{{ aca_frontdoor_profile_name }}"
+    origin_group_name: "{{ azure_visibility_frontdoor_origin_group_name }}"
+    name: "{{ azure_visibility_frontdoor_origin_name }}"
+    host_name: "{{ aca_visibility_app_fqdn }}"
+    origin_host_header: "{{ aca_visibility_app_fqdn }}"
+    http_port: 80
+    https_port: 443
+    priority: 1
+    weight: 1000
+    enabled_state: Enabled
+
+- name: Ensure visibility Front Door endpoint (unique hostname)
+  azure.azcollection.azure_rm_afdendpoint:
+    resource_group: "{{ container_workload_resource_group_name }}"
+    profile_name: "{{ aca_frontdoor_profile_name }}"
+    name: "{{ azure_visibility_frontdoor_endpoint_name }}"
+    enabled_state: Enabled
+  register: afd_visibility_endpoint_result
+
+- name: Ensure route on visibility endpoint to visibility origin group
+  azure.azcollection.azure_rm_afdroute:
+    resource_group: "{{ container_workload_resource_group_name }}"
+    profile_name: "{{ aca_frontdoor_profile_name }}"
+    endpoint_name: "{{ azure_visibility_frontdoor_endpoint_name }}"
+    name: "{{ azure_visibility_frontdoor_route_name }}"
+    origin_group: "{{ azure_visibility_frontdoor_origin_group_name }}"
+    enabled_state: Enabled
+    forwarding_protocol: HttpsOnly
+    https_redirect: Enabled
+    link_to_default_domain: Enabled
+    patterns_to_match:
+      - /*
+    supported_protocols:
+      - Http
+      - Https
+    rule_sets: []
+
+- name: Set visibility Front Door URL for set_stats / ntfy
+  ansible.builtin.set_fact:
+    visibility_front_door_url: "https://{{ afd_visibility_endpoint_result.host_name }}"

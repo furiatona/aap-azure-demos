@@ -66,9 +66,21 @@ To send the **Front Door HTTPS URL** to **ntfy** (`ntfy.sh/rh-azure-aca-deployme
 
 **Teardown:** Run `project/99_destroy_workload_resource_group.yml` from a **separate workflow** (and job template), with RBAC limited to who may destroy the resource group.
 
-### Optional: storage visibility report (10–11)
+### Workflows: ACA demo vs storage visibility (10–11)
 
-Separate from the container workload sequence: **10** builds an HTML report of storage accounts on the execution node and `set_stats` **`report_url`** as the **Front Door** URL (playbook **04**); **11** posts that link (and optional local path) to ntfy (`tasks/ntfy_send.yml`, same pattern as **05**). In AAP, chain **11** after **10** on success. Configure `project/vars/azure_visibility_defaults.yml` plus Front Door names in `container_workload_defaults.yml`, and allow HTTPS egress to **ntfy.sh** for **11**.
+**ACA application workflow (unchanged):** Use the sequence already described in this file: **00 → (01 ∥ 02) → 03** with **Convergence: All** on **03** → **04** → optional **05**. Same **Project**, **Credential**, and **Execution Environment** as today; **03** and **10** both need **Azure CLI** (`az`) in the EE.
+
+**Storage visibility workflow:** Provisions a **second** Container App in the **same** resource group and managed environment as **03**, serves the storage HTML report from that app, adds a **separate** Front Door endpoint + origin group + route to that app (playbook **04** is unchanged and still owns the demo app FD route). Typical chain:
+
+1. **Prerequisite:** The ACA stack already exists (run the **ACA workflow** through **04** once), *or* run **00 → 01 ∥ 02 → 03 (All) → 04** in the same way so **ACR**, **ACA env**, **main app**, and **FD profile** exist.
+2. **10** — `project/10_azure_storage_visibility_report.yml` (incremental ARM + `az acr import` + FD visibility stack). Re-run whenever you want an updated report in the visibility app.
+3. **11** — `project/11_send_ntfy_report_url.yml` (ntfy; needs HTTPS to **ntfy.sh**).
+
+**Combined in one Controller workflow:** After **04** (and optional **05**), add nodes **10 → 11** on success so operators get the **visibility** Front Door URL (different hostname than the demo app endpoint).
+
+**`set_stats` from 10 for downstream jobs:** `report_url` (visibility Front Door HTTPS), `report_local_path`, `visibility_container_app_url` (direct ACA URL for the report app).
+
+**Variables:** `project/vars/azure_visibility_defaults.yml` (visibility app name, ARM deployment name, FD names). Override `aca_visibility_container_app_name` / `azure_visibility_frontdoor_endpoint_name` if Azure reports a naming conflict.
 
 ---
 
@@ -122,6 +134,8 @@ flowchart TB
 | **01 + 02** → **03** | **No** | **03** needs **ACR** from **01**. In AAP, set the **`03` workflow node** to **Convergence: All** so **03** waits for **both** parents (not default **Any**). |
 | **03** → **04** | **No** | **04** reads the ARM deployment output for the Container App FQDN created in **03**. |
 | **04** → **05** | **No** (optional **05**) | **05** is notification only; chain after **04** if your EE can reach **ntfy.sh**. |
+| **04** → **10** | **No** | **10** needs the **FD profile** and **ACA env** from **04**/**03**; it adds a second ACA and a second FD endpoint (same EE needs **`az`** as **03**). |
+| **10** → **11** | **No** (optional **11**) | **11** is ntfy only; chain after **10** on success. |
 | **99** (destroy) | **Separate workflow** | Do not chain **99** in the provision workflow. Use another workflow and job template for teardown so a routine provision run never ends in destroy. |
 
 **Summary:** The only **parallel** slice in the provision path is **Job Template 01** and **Job Template 02** immediately after **00**. Everything else is strictly sequential.

@@ -1,14 +1,10 @@
 ---
-# Azure visibility (phase 1): HTML report of storage accounts in one resource group.
-# Mirrors the spirit of awsinfravis25 playbooks/cloud_report.yml (gather -> template -> publish).
+# Azure visibility: storage account HTML report + dedicated Container App + Front Door URL.
 #
-# The HTML is written on the execution node (report_local_path). For workflows / ntfy (11),
-# report_url is the Front Door HTTPS URL from the same defaults as playbook 04 (demo entry),
-# not a blob SAS link — avoids storage public-access and account-key/SAS complexity.
+# - Renders the report and deploys it to a second ACA (same RG / env as 03) via incremental ARM.
+# - Front Door: new origin group + origin + endpoint + route (does not alter 04's demo origin group).
 #
-# Requires playbook 04 (or equivalent) deployed when azure_visibility_use_front_door_url is true.
-#
-# Extra vars: see vars/azure_visibility_defaults.yml and vars/container_workload_defaults.yml (FD names).
+# Prerequisites: 00, 01, 03 (ACA env + ACR image), 04 (FD profile on same RG). Playbooks 03–05 unchanged in behavior.
 #
 - name: Azure storage visibility report
   hosts: localhost
@@ -19,6 +15,8 @@
   vars_files:
     - vars/container_workload_defaults.yml
     - vars/azure_visibility_defaults.yml
+  vars:
+    visibility_arm_file: "{{ playbook_dir }}/templates/container_workload/arm_container_app_visibility_only.json"
   tasks:
     - name: List storage accounts in resource group
       azure.azcollection.azure_rm_storageaccount_info:
@@ -40,46 +38,143 @@
         dest: "{{ azure_visibility_report_local_path }}"
         mode: "0644"
 
-    - name: Resolve Front Door URL for notification (same endpoint as container demo)
-      when: azure_visibility_use_front_door_url | default(true) | bool
-      block:
-        - name: Load Front Door hostname from Azure
-          ansible.builtin.include_tasks: tasks/front_door_set_url_facts.yml
-      rescue:
-        - name: Front Door lookup failed (deploy 04 or disable FD URL mode)
-          ansible.builtin.set_fact:
-            front_door_url: ""
+    - name: Base64-encode visibility HTML for Container App secret
+      ansible.builtin.set_fact:
+        visibility_page_b64: "{{ lookup('file', azure_visibility_report_local_path) | b64encode }}"
 
-    - name: Choose report_url for set_stats (-e report_url wins; else Front Door when enabled)
+    - name: Deploy visibility Container App (incremental ARM; same image as main demo)
+      when:
+        - not ansible_check_mode
+        - azure_visibility_deploy_container_app | default(true) | bool
+      block:
+        - name: Ensure Azure CLI session for ACR import and ARM
+          ansible.builtin.include_tasks: tasks/azure_cli_sp_login.yml
+
+        - name: Import base image into ACR (same as playbook 03; idempotent)
+          ansible.builtin.command:
+            argv:
+              - az
+              - acr
+              - import
+              - "--name"
+              - "{{ aca_acr_name }}"
+              - "--source"
+              - "{{ aca_image_import_source }}"
+              - "--image"
+              - "{{ aca_acr_repository }}:{{ aca_acr_image_tag }}"
+              - "--force"
+          register: visibility_acr_import
+          changed_when: visibility_acr_import.rc == 0
+          retries: "{{ aca_acr_import_retries | int }}"
+          delay: "{{ aca_acr_import_delay_seconds | int }}"
+          until: visibility_acr_import.rc == 0
+
+        - name: Load incremental ARM template for visibility Container App
+          ansible.builtin.set_fact:
+            visibility_aca_arm: "{{ lookup('file', visibility_arm_file) | from_json }}"
+
+        - name: Deploy visibility Container App into existing managed environment
+          azure.azcollection.azure_rm_deployment:
+            resource_group: "{{ container_workload_resource_group_name }}"
+            name: "{{ aca_visibility_arm_deployment_name }}"
+            location: "{{ container_workload_region }}"
+            deployment_mode: incremental
+            template: "{{ visibility_aca_arm }}"
+            parameters:
+              location:
+                value: "{{ container_workload_region }}"
+              environmentName:
+                value: "{{ aca_container_apps_env_name }}"
+              appName:
+                value: "{{ aca_visibility_container_app_name }}"
+              acrName:
+                value: "{{ aca_acr_name }}"
+              imageRepository:
+                value: "{{ aca_acr_repository }}"
+              imageTag:
+                value: "{{ aca_acr_image_tag }}"
+              pageContentB64:
+                value: "{{ visibility_page_b64 }}"
+          register: visibility_aca_deploy
+
+        - name: Resolve visibility Container App FQDN from deployment output
+          ansible.builtin.set_fact:
+            aca_visibility_app_fqdn: "{{ visibility_aca_deploy.deployment.outputs.get('visibilityContainerAppFqdn', {}).get('value', '') }}"
+
+        - name: Fail when visibility app FQDN is missing
+          ansible.builtin.fail:
+            msg: >-
+              ARM deployment {{ aca_visibility_arm_deployment_name }} did not return visibilityContainerAppFqdn.
+              Ensure playbook 03 created the Container Apps environment {{ aca_container_apps_env_name }}.
+          when: aca_visibility_app_fqdn | default('', true) | length == 0
+
+    # When azure_visibility_deploy_container_app is false, supply -e aca_visibility_app_fqdn=host.azurecontainerapps.io
+
+    - name: Fail when Front Door is enabled but visibility app FQDN is unknown
+      when:
+        - not ansible_check_mode
+        - azure_visibility_use_front_door_url | default(true) | bool
+        - (aca_visibility_app_fqdn | default('') | length) == 0
+      ansible.builtin.fail:
+        msg: >-
+          No visibility Container App FQDN. Enable azure_visibility_deploy_container_app (default) or pass
+          -e aca_visibility_app_fqdn=<fqdn-from-azure>.
+
+    - name: Ensure visibility Front Door endpoint, origin, and route
+      when:
+        - not ansible_check_mode
+        - azure_visibility_use_front_door_url | default(true) | bool
+      block:
+        - name: Provision visibility FD stack
+          ansible.builtin.include_tasks: tasks/visibility_fd_ensure_endpoint.yml
+      rescue:
+        - name: Visibility Front Door setup failed
+          ansible.builtin.set_fact:
+            visibility_front_door_url: ""
+
+    - name: Choose report_url for set_stats (-e report_url wins; else visibility FD when enabled)
+      when: not ansible_check_mode
       ansible.builtin.set_fact:
         azure_visibility_report_url: >-
           {{
             (report_url | default(''))
             if (report_url | default('') | length > 0)
             else (
-              (front_door_url | default(''))
+              (visibility_front_door_url | default(''))
               if (azure_visibility_use_front_door_url | default(true) | bool)
               else (report_url | default('', true))
             )
           }}
 
-    - name: Fail when no URL for downstream ntfy (Front Door missing and no -e report_url=)
+    - name: Fail when no URL for downstream ntfy
       when:
+        - not ansible_check_mode
         - (azure_visibility_report_url | default('') | length) == 0
       ansible.builtin.fail:
         msg: >-
-          No report_url available. Run playbook 04 first so Front Door exists, or pass
-          -e report_url=https://... , or set azure_visibility_use_front_door_url: false with -e report_url=...
+          No report_url available. Run 00–04 then 10; or pass -e report_url=https://... ;
+          or set azure_visibility_use_front_door_url: false with -e report_url=...
 
-    - name: Show paths and demo URL
+    - name: Show visibility URLs
+      when: not ansible_check_mode
       ansible.builtin.debug:
         msg:
-          - "HTML report (on controller): {{ azure_visibility_report_local_path }}"
-          - "Demo / notification URL (Front Door): {{ azure_visibility_report_url }}"
+          - "HTML on controller: {{ azure_visibility_report_local_path }}"
+          - "Visibility Container App (direct): https://{{ aca_visibility_app_fqdn }}"
+          - "Visibility Front Door: {{ azure_visibility_report_url }}"
 
     - name: Publish for follow-on workflow jobs (AAP set_stats)
+      when: not ansible_check_mode
       ansible.builtin.set_stats:
         data:
           report_url: "{{ azure_visibility_report_url }}"
           report_local_path: "{{ azure_visibility_report_local_path }}"
+          visibility_container_app_url: >-
+            {{ ('https://' ~ aca_visibility_app_fqdn) if (aca_visibility_app_fqdn | default('') | length > 0) else '' }}
         per_host: false
+
+    - name: Check mode notice
+      ansible.builtin.debug:
+        msg: >-
+          Check mode: would base64 report, optionally deploy visibility ACA and FD (skipped).
+      when: ansible_check_mode

@@ -24,7 +24,7 @@ Workflow job templates can call these playbooks in order later; this document on
 | 03 | `03_create_container_apps_sample.yml` | `az acr import` (default: **ECR Public** mirror of `library/python`, not Docker Hub) + ARM: Log Analytics, Container Apps env, app |
 | 04 | `04_create_front_door_standard.yml` | Azure Front Door Standard profile, endpoint, origin (HTTPS to the app), default route |
 | 05 | `05_send_ntfy_deployment_url.yml` | POSTs the Front Door HTTPS URL to [ntfy](https://ntfy.sh) (default topic `rh-azure-aca-deployment`); optional after **04** |
-| 10 | `10_azure_storage_visibility_report.yml` | Lists storage accounts in one RG, renders HTML on the controller; `set_stats` publishes **Front Door** `report_url` (playbook **04**) and `report_local_path` |
+| 10 | `10_azure_storage_visibility_report.yml` | Lists storage accounts, renders HTML, deploys a **second ACA** (incremental ARM) with that HTML, adds **visibility-only** FD origin/endpoint/route; `set_stats`: `report_url`, `visibility_container_app_url`, `report_local_path` |
 | 11 | `11_send_ntfy_report_url.yml` | POSTs `report_url` (usually Front Door) and optional `report_local_path` to ntfy; run after **10** or pass `-e report_url=...` |
 | 99 | `99_destroy_workload_resource_group.yml` | Deletes the whole resource group |
 
@@ -80,7 +80,7 @@ Reusable task files live under `project/tasks/`: **`ntfy_send.yml`** (generic `c
 
 For **Automation Controller / AAP** (job template, credential, workflow node, network), see **`JOB_WORKFLOW.md`** → section **“AAP: ntfy (playbook 05)”**.
 
-**Azure storage visibility (10–11):** Defaults live in `project/vars/azure_visibility_defaults.yml` and (for Front Door) `project/vars/container_workload_defaults.yml`. Playbook **10** writes the HTML table to **`azure_visibility_report_local_path`** on the execution node and sets **`report_url`** in **`set_stats`** to the **Front Door HTTPS URL** from playbook **04** (demo entry point), so **11** can ntfy the same style of link as playbook **05**. The visibility HTML is **not** served by that URL until you host it on the app or elsewhere; ntfy also includes **`report_local_path`** when present so operators know where the file landed on the controller.
+**Azure storage visibility (10–11):** Defaults in `project/vars/azure_visibility_defaults.yml`; **03/04** names come from `project/vars/container_workload_defaults.yml`. Playbook **10** deploys **`aca_visibility_container_app_name`** into the **existing** Container Apps environment (needs **01** + **03**), then creates a **dedicated** FD origin group + endpoint + route so **`report_url`** is a **different** hostname than the demo app (**04**) and the **browser shows the storage report HTML** from the second ACA. **11** posts that link via ntfy. AAP workflow notes: **`JOB_WORKFLOW.md`** (section *Workflows: ACA demo vs storage visibility*). Playbook **10** reuses **`tasks/azure_cli_sp_login.yml`** (same `az` login pattern as **03**).
 
 ## Teardown
 
