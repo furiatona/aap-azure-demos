@@ -31,10 +31,19 @@
       ansible.builtin.include_tasks: tasks/front_door_set_url_facts.yml
       when: front_door_url is not defined or (front_door_url | default('') | length == 0)
 
+    # Do not pass `ntfy_server: "{{ ntfy_server | default(...) }}"` on include_tasks vars:
+    # Ansible templating treats that as a self-referential definition and recurses until it errors.
+    - name: Resolve ntfy parameters for include_tasks
+      ansible.builtin.set_fact:
+        ntfy_send_server: "{{ ntfy_server | default('ntfy.sh') }}"
+        ntfy_send_topic: "{{ ntfy_topic | default('rh-azure-aca-deployment') }}"
+        ntfy_send_message: "{{ front_door_url }}"
+        ntfy_send_title: "{{ ntfy_title | default('Azure ACA demo — Front Door URL') }}"
+
     - name: Send ntfy notification with Front Door URL
       ansible.builtin.include_tasks: tasks/ntfy_send.yml
       vars:
-        ntfy_server: "{{ ntfy_server | default('ntfy.sh') }}"
-        ntfy_topic: "{{ ntfy_topic | default('rh-azure-aca-deployment') }}"
-        ntfy_message: "{{ front_door_url }}"
-        ntfy_title: "{{ ntfy_title | default('Azure ACA demo — Front Door URL') }}"
+        ntfy_server: "{{ ntfy_send_server }}"
+        ntfy_topic: "{{ ntfy_send_topic }}"
+        ntfy_message: "{{ ntfy_send_message }}"
+        ntfy_title: "{{ ntfy_send_title }}"
