@@ -37,7 +37,12 @@
 {% set sku = a.sku.name | default(a.account_type | default('', true), true) %}
 {% set tier = a.access_tier | default(a.accessTier | default('', true), true) %}
 {% set pe = a.primary_endpoints | default(a.primaryEndpoints | default({}, true), true) %}
-{% set blob_ep = (pe.blob | default(pe['blob'] | default('', true), true)) if pe else '' %}
+{% set blob_raw = (pe.blob | default(pe['blob'], true)) if pe else none %}
+{% if blob_raw is mapping %}
+{% set blob_ep = blob_raw.endpoint | default(blob_raw['endpoint'] | default('', true), true) %}
+{% else %}
+{% set blob_ep = blob_raw | default('', true) %}
+{% endif %}
       <tr>
         <td>{{ a.name | default('', true) }}</td>
         <td>{{ a.location | default('', true) }}</td>

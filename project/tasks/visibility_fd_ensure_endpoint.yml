@@ -1,9 +1,17 @@
 ---
 # Dedicated Front Door endpoint + origin group + origin for the visibility Container App only.
-# Does not reuse playbook 04's origin group (demo app). Expects fact aca_visibility_app_fqdn (no https://).
+# Does not reuse playbook 04's origin group. Expects fact aca_visibility_app_fqdn (no https://).
 #
-# Vars: container_workload_defaults.yml, azure_visibility_defaults.yml, aca_frontdoor_profile_name.
+# Endpoint is created first so Azure can start hostname / edge registration while origins are configured.
 #
+- name: Ensure visibility Front Door endpoint (unique hostname)
+  azure.azcollection.azure_rm_afdendpoint:
+    resource_group: "{{ container_workload_resource_group_name }}"
+    profile_name: "{{ aca_frontdoor_profile_name }}"
+    name: "{{ azure_visibility_frontdoor_endpoint_name }}"
+    enabled_state: Enabled
+  register: afd_visibility_endpoint_result
+
 - name: Create Front Door origin group for visibility Container App
   azure.azcollection.azure_rm_afdorigingroup:
     resource_group: "{{ container_workload_resource_group_name }}"
@@ -33,14 +41,6 @@
     weight: 1000
     enabled_state: Enabled
 
-- name: Ensure visibility Front Door endpoint (unique hostname)
-  azure.azcollection.azure_rm_afdendpoint:
-    resource_group: "{{ container_workload_resource_group_name }}"
-    profile_name: "{{ aca_frontdoor_profile_name }}"
-    name: "{{ azure_visibility_frontdoor_endpoint_name }}"
-    enabled_state: Enabled
-  register: afd_visibility_endpoint_result
-
 - name: Ensure route on visibility endpoint to visibility origin group
   azure.azcollection.azure_rm_afdroute:
     resource_group: "{{ container_workload_resource_group_name }}"
@@ -58,6 +58,31 @@
       - Http
       - Https
     rule_sets: []
+
+- name: Visibility AFD endpoint status (Azure CLI; not fatal if az missing)
+  ansible.builtin.command:
+    argv:
+      - az
+      - afd
+      - endpoint
+      - show
+      - "--resource-group"
+      - "{{ container_workload_resource_group_name }}"
+      - "--profile-name"
+      - "{{ aca_frontdoor_profile_name }}"
+      - "--endpoint-name"
+      - "{{ azure_visibility_frontdoor_endpoint_name }}"
+      - "--query"
+      - "{hostName:hostName,deploymentStatus:deploymentStatus,provisioningState:provisioningState}"
+      - "-o"
+      - yaml
+  register: visibility_afd_endpoint_az
+  changed_when: false
+  failed_when: false
+
+- name: Log visibility AFD endpoint Azure state
+  ansible.builtin.debug:
+    msg: "{{ visibility_afd_endpoint_az.stdout | default('(az afd endpoint show skipped or failed — install Azure CLI on the EE)') }}"
 
 - name: Set visibility Front Door URL for set_stats / ntfy
   ansible.builtin.set_fact:
