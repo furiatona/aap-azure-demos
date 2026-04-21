@@ -11,8 +11,8 @@ Workflow job templates can call these playbooks in order later; this document on
 - **Job templates**: Set **Playbook** to a path relative to the project root, for example `project/00_create_workload_resource_group.yml`, then `project/01_create_storage_and_acr.yml`, and so on. Each playbook is self-contained (`hosts: localhost`, `connection: local`).
 - **Inventory**: Use an inventory that includes `localhost` (Controller’s *Demo Inventory* / *localhost* pattern is typical). These playbooks do not target remote hosts.
 - **Credentials**: Attach an Azure credential (or equivalent extra variables / credential plugin) compatible with `azure.azcollection` (same as the rest of this repo).
-- **Playbook 03**: The execution environment (or path on the execution node) must include the **Azure CLI** (`az`) and a valid `az login` session if you rely on CLI auth, because `az acr import` is used before the ARM deployment.
-- **Check mode**: Playbook **03** skips the `az acr import` and ARM deployment when Ansible **check mode** is enabled, and prints a short notice instead.
+- **Playbook 03**: The execution environment must include the **Azure CLI** (`az`). The playbook performs **`az login --service-principal`** using the **Microsoft Azure Resource Manager** credential env vars (`AZURE_CLIENT_ID`, `AZURE_SECRET`, `AZURE_TENANT`, `AZURE_SUBSCRIPTION_ID`) before `az acr import`.
+- **Check mode**: Playbook **03** skips Azure CLI login, `az acr import`, and ARM deployment when Ansible **check mode** is enabled, and prints a short notice instead.
 
 ## Playbook order
 
@@ -38,7 +38,7 @@ ansible-playbook project/01_create_storage_and_acr.yml
 
 - `azure.azcollection` installed (for example `ansible-galaxy collection install azure.azcollection`).
 - Azure credentials configured for Ansible (for example `~/.azure/credentials` as in the main project README).
-- **Azure CLI** (`az`) available on the controller host and **signed in** (`az login`). Playbook **03** uses `az acr import` to copy `python:3.12-alpine` from Docker Hub into your ACR before the Container App is deployed.
+- **Azure CLI** (`az`) on the execution environment (Controller EE image). Playbook **03** runs `az acr import`; it first runs **`az login --service-principal`** using the same variables **AAP injects** for the Microsoft Azure Resource Manager credential (`AZURE_CLIENT_ID`, `AZURE_SECRET`, `AZURE_TENANT`, `AZURE_SUBSCRIPTION_ID`). For **local** runs without those env vars, run **`az login`** once so the CLI has a session, or export the same `AZURE_*` / `ARM_*` variables.
 - **Globally unique** names in `project/vars/container_workload_defaults.yml` (storage account, ACR, SQL server) adjusted for your subscription before the first deploy.
 
 ## Variables
