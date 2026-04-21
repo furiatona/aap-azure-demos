@@ -1,3 +1,7 @@
+# Local template validation (ansible-playbook project/.ci_render_cloud_report.yml)
+project/.venv-ansible/
+project/.ansible-tmp/
+
 private.yml
 azure/*
 .DS_Store

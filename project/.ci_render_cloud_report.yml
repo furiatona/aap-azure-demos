@@ -1,0 +1,57 @@
+---
+# Local Jinja check for templates/azure_visibility/cloud_report.html.j2 (no AAP).
+# From project/: ansible-playbook .ci_render_cloud_report.yml
+# Optional: -e "dest=/path/to/out.html"
+- name: Render cloud report template (syntax check)
+  hosts: localhost
+  gather_facts: true
+  vars:
+    azure_visibility_resource_group_name: aca-ansible-demo-rg
+    azure_visibility_subscription_hint: ""
+    azure_visibility_arm_resources:
+      - name: aca-demo-app
+        type: Microsoft.App/containerApps
+        location: eastus
+        tags:
+          cost-center: "542"
+      - name: aca-visibility-report-app
+        type: Microsoft.App/containerApps
+        location: eastus
+        tags: {}
+      - name: aca-demo-sql/appdb
+        type: Microsoft.Sql/servers/databases
+        location: eastus
+        tags:
+          cost-center: "542"
+      - name: aca-demo-sql/master
+        type: Microsoft.Sql/servers/databases
+        location: eastus
+    azure_visibility_storage_accounts:
+      - name: acaansibledemo001
+        location: eastus
+        sku:
+          name: Standard_LRS
+        kind: StorageV2
+        access_tier: Hot
+        primary_endpoints:
+          blob:
+            endpoint: "https://acaansibledemo001.blob.core.windows.net/"
+      - name: legacyflat
+        location: eastus
+        sku:
+          name: Standard_GRS
+        kind: StorageV2
+        primary_endpoints:
+          blob: "https://legacyflat.blob.core.windows.net/"
+  tasks:
+    - name: Ensure output directory exists
+      ansible.builtin.file:
+        path: "{{ (dest | default(playbook_dir + '/.ansible-tmp/cloud_report_test.html')) | dirname }}"
+        state: directory
+        mode: "0755"
+
+    - name: Template report to dest
+      ansible.builtin.template:
+        src: azure_visibility/cloud_report.html.j2
+        dest: "{{ dest | default(playbook_dir + '/.ansible-tmp/cloud_report_test.html') }}"
+        mode: "0644"

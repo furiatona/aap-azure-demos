@@ -127,6 +127,42 @@
     }
     details.card summary::-webkit-details-marker { display: none; }
     details.card[open] summary { border-bottom: 1px solid var(--border); }
+    .inventory-by-type { border-top: 1px solid var(--border); }
+    details.type-group { border-bottom: 1px solid var(--border); }
+    details.type-group:last-of-type { border-bottom: none; }
+    details.type-group > summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      padding: 0.75rem 1rem;
+      background: #fafbfc;
+      font-weight: 600;
+    }
+    details.type-group > summary::-webkit-details-marker { display: none; }
+    details.type-group[open] > summary {
+      background: var(--accent-bg);
+      border-bottom: 1px solid var(--border);
+    }
+    details.type-group > summary .summary-left {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+    details.type-group > summary .chev {
+      color: var(--muted);
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+    }
+    details.type-group[open] > summary .chev { transform: rotate(180deg); }
+    .nested-table-wrap { padding: 0.5rem 0.75rem 1rem; }
+    table.data.nested { font-size: 0.82rem; }
+    table.data.nested th:first-child, table.data.nested td:first-child { min-width: 12rem; }
     footer {
       text-align: center;
       padding: 2rem 1rem;
@@ -153,17 +189,17 @@
       </div>
       <div class="card">
         <h2><i class="fa-solid fa-clock" aria-hidden="true"></i> Generated</h2>
-        <div class="stat-value" style="font-size:1.1rem;">{{ ansible_date_time.date | default('') }}</div>
-        <div class="stat-label">{{ ansible_date_time.time | default('') }} (controller time)</div>
+        <div class="stat-value" style="font-size:1.1rem;">{{ (ansible_date_time | default({})).date | default('') }}</div>
+        <div class="stat-label">{{ (ansible_date_time | default({})).time | default('') }} (controller time)</div>
       </div>
       <div class="card">
         <h2><i class="fa-solid fa-layer-group" aria-hidden="true"></i> ARM resources</h2>
-        <div class="stat-value">{{ azure_visibility_arm_resources | length }}</div>
+        <div class="stat-value">{{ azure_visibility_arm_resources | default([]) | length }}</div>
         <div class="stat-label">In this resource group</div>
       </div>
       <div class="card">
         <h2><i class="fa-solid fa-database" aria-hidden="true"></i> Storage accounts</h2>
-        <div class="stat-value">{{ azure_visibility_storage_accounts | length }}</div>
+        <div class="stat-value">{{ azure_visibility_storage_accounts | default([]) | length }}</div>
         <div class="stat-label">Detected via storage API</div>
       </div>
     </div>
@@ -176,40 +212,55 @@
       <div class="card">
         <div class="section-header">
           <h2><i class="fa-solid fa-list-ul" aria-hidden="true"></i> Resource inventory</h2>
-          <p>All Azure Resource Manager resources in the group (read-only inventory). Types reflect Azure provider namespaces.</p>
+          <p>Resources grouped by ARM type — click a row to expand. (Read-only inventory; provider namespaces as returned by Azure.)</p>
         </div>
-        <div class="table-wrap">
-          <table class="data">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Location</th>
-                <th>Tags</th>
-              </tr>
-            </thead>
-            <tbody>
-{% for r in (azure_visibility_arm_resources | sort(attribute='name')) %}
-{% set tagmap = r.tags | default({}, true) %}
-              <tr>
-                <td><strong>{{ r.name | default('', true) }}</strong></td>
-                <td><span class="type-pill mono" title="{{ r.type | default('', true) }}">{{ r.type | default('', true) }}</span></td>
-                <td>{{ r.location | default('—', true) }}</td>
-                <td class="tags-muted">
-                  {%- if tagmap -%}
-                    {%- for item in tagmap | dict2items -%}
-                      {%- if not loop.first -%}, {% endif -%}{{ item.key }}={{ item.value }}
-                    {%- endfor -%}
-                  {%- else -%}
-                    —
-                  {%- endif -%}
-                </td>
-              </tr>
+        <div class="inventory-by-type">
+{% if (azure_visibility_arm_resources | default([]) | length) == 0 %}
+          <p class="tags-muted" style="padding: 1rem 1.15rem; margin: 0;">
+            No ARM resources returned (check RBAC or set <span class="mono">azure_visibility_collect_arm_resources: true</span>).
+          </p>
 {% else %}
-              <tr><td colspan="4">No ARM resources returned (check RBAC or set <span class="mono">azure_visibility_collect_arm_resources: true</span>).</td></tr>
+{% for type_key, type_resources in (azure_visibility_arm_resources | default([]) | sort(attribute='type') | groupby('type')) %}
+          <details class="type-group">
+            <summary>
+              <span class="summary-left">
+                <span class="type-pill mono" title="{{ type_key | default('', true) }}">{{ type_key | default('—', true) }}</span>
+                <span class="tags-muted" style="font-weight: 500;">{{ type_resources | length }} resource{% if (type_resources | length) != 1 %}s{% endif %}</span>
+              </span>
+              <i class="fa-solid fa-angle-down chev" aria-hidden="true"></i>
+            </summary>
+            <div class="nested-table-wrap">
+              <table class="data nested">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Location</th>
+                    <th>Tags</th>
+                  </tr>
+                </thead>
+                <tbody>
+{% for r in (type_resources | sort(attribute='name')) %}
+{% set tagmap = r.tags | default({}, true) %}
+                  <tr>
+                    <td><strong>{{ r.name | default('', true) }}</strong></td>
+                    <td>{{ r.location | default('—', true) }}</td>
+                    <td class="tags-muted">
+                      {%- if tagmap -%}
+                        {%- for item in tagmap | dict2items -%}
+                          {%- if not loop.first -%}, {% endif -%}{{ item.key }}={{ item.value }}
+                        {%- endfor -%}
+                      {%- else -%}
+                        —
+                      {%- endif -%}
+                    </td>
+                  </tr>
 {% endfor %}
-            </tbody>
-          </table>
+                </tbody>
+              </table>
+            </div>
+          </details>
+{% endfor %}
+{% endif %}
         </div>
       </div>
     </section>
@@ -233,7 +284,7 @@
               </tr>
             </thead>
             <tbody>
-{% for a in azure_visibility_storage_accounts %}
+{% for a in (azure_visibility_storage_accounts | default([])) %}
 {% set sku = a.sku.name | default(a.account_type | default('', true), true) %}
 {% set tier = a.access_tier | default(a.accessTier | default('', true), true) %}
 {% set pe = a.primary_endpoints | default(a.primaryEndpoints | default({}, true), true) %}
