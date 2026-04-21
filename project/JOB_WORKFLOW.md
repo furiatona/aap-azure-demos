@@ -59,8 +59,8 @@ To send the **Front Door HTTPS URL** to **ntfy** (`ntfy.sh/rh-azure-aca-deployme
 5. **Extra variables (optional)** — Override defaults without editing Git, for example:
    - `ntfy_topic` — default `rh-azure-aca-deployment`
    - `ntfy_server` — default `ntfy.sh` (host only; the playbook always uses `https://`)
-   - `ntfy_title` — optional notification title header
-   - `front_door_url` — if set (e.g. from a survey), **05** skips the Azure read and posts this string as the body (useful if Azure API access is restricted on a dedicated notification template).
+   - `ntfy_message` — optional full notification body (default is `Your app deployed successfully, url: <Front Door URL>`)
+   - `front_door_url` — if set (e.g. from a survey), **05** skips the Azure read and uses that URL in the default message (useful if Azure API access is restricted on a dedicated notification template).
 
 **Survey:** Not required for the default flow (URL is resolved from Azure). Add a survey only if operators must paste a URL or override the topic per run.
 

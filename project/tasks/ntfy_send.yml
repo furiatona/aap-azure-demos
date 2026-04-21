@@ -7,7 +7,8 @@
 #   ntfy_message  — request body (string)
 #
 # Optional:
-#   ntfy_title    — if set and non-empty, sent as the "Title" header
+#   ntfy_title    — if set and non-empty, sent as the "Title" header (use ASCII only;
+#                  Python/urllib may encode headers as latin-1)
 #
 - name: Publish message to ntfy
   ansible.builtin.uri:
