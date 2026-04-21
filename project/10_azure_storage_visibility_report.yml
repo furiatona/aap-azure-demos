@@ -69,6 +69,12 @@
       ansible.builtin.set_fact:
         visibility_page_b64: "{{ lookup('file', azure_visibility_report_local_path) | b64encode }}"
 
+    - name: Log rendered report checksum (compare across runs to confirm Controller picked up template changes)
+      ansible.builtin.debug:
+        msg: >-
+          visibility HTML sha256={{ lookup('file', azure_visibility_report_local_path) | hash('sha256') }}
+          bytes={{ lookup('file', azure_visibility_report_local_path) | length | int }}
+
     - name: Deploy visibility Container App (incremental ARM; same image as main demo)
       when:
         - not ansible_check_mode
@@ -122,6 +128,8 @@
                 value: "{{ aca_acr_image_tag }}"
               pageContentB64:
                 value: "{{ visibility_page_b64 }}"
+              reportBuildStamp:
+                value: "{{ ansible_date_time.epoch | default(ansible_date_time.date ~ 'T' ~ ansible_date_time.time) }}-{{ lookup('pipe', 'uuidgen') | trim }}"
           register: visibility_aca_deploy
 
         - name: Resolve visibility Container App FQDN from deployment output

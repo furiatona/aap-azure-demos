@@ -8,7 +8,12 @@
     "acrName": { "type": "string" },
     "imageRepository": { "type": "string" },
     "imageTag": { "type": "string" },
-    "pageContentB64": { "type": "secureString" }
+    "pageContentB64": { "type": "secureString" },
+    "reportBuildStamp": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": { "description": "Set by Ansible each run so ACA creates a new revision when HTML/secret changes." }
+    }
   },
   "resources": [
     {
@@ -60,6 +65,10 @@
                 {
                   "name": "PAGE_B64",
                   "secretRef": "page-b64"
+                },
+                {
+                  "name": "REPORT_BUILD_STAMP",
+                  "value": "[parameters('reportBuildStamp')]"
                 }
               ]
             }
