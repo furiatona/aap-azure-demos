@@ -1,0 +1,16 @@
+---
+# Defaults for playbooks 10 (Azure storage visibility HTML report) and 11 (ntfy URL).
+# Align with your subscription: resource group and storage account used to host the HTML blob.
+
+azure_visibility_resource_group_name: "aca-ansible-demo-rg"
+# Storage account that receives the uploaded report (demo default matches 01_create_storage_and_acr).
+azure_visibility_report_storage_account_name: "acaansibledemo001"
+azure_visibility_report_container_name: "cloud-visibility-reports"
+azure_visibility_report_blob_name: "index.html"
+# Local path before upload (controller/EE filesystem).
+azure_visibility_report_local_path: "/tmp/azure_cloud_report.html"
+# When true, upload blob and set_stats report_url. Requires RBAC: Storage Blob Data Contributor (or equivalent) for auth_mode login.
+azure_visibility_publish_report: true
+
+# Default ntfy topic for playbook 11 (override with -e ntfy_topic=...).
+azure_visibility_ntfy_topic: "rh-azure-cloud-report"

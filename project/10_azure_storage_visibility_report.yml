@@ -1,0 +1,76 @@
+---
+# Azure visibility (phase 1): HTML report of storage accounts in one resource group.
+# Mirrors the spirit of awsinfravis25 playbooks/cloud_report.yml (gather -> template -> publish).
+#
+# Publish: uploads HTML to Blob Storage so playbook 11 (or humans) can share a stable HTTPS URL.
+# Lab default uses a blob container with anonymous read at the blob level (public_access: blob).
+# For production, prefer private blobs + SAS and adjust this playbook later.
+#
+# Extra vars: override any key from vars/azure_visibility_defaults.yml
+#
+- name: Azure storage visibility report
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  collections:
+    - azure.azcollection
+  vars_files:
+    - vars/azure_visibility_defaults.yml
+  tasks:
+    - name: List storage accounts in resource group
+      azure.azcollection.azure_rm_storageaccount_info:
+        resource_group: "{{ azure_visibility_resource_group_name }}"
+        auth_mode: login
+      register: visibility_storage_facts
+
+    - name: Normalize storage account list for templating
+      ansible.builtin.set_fact:
+        azure_visibility_storage_accounts: >-
+          {{
+            visibility_storage_facts.azure_storageaccounts
+            | default(visibility_storage_facts.storageaccounts | default([]))
+          }}
+
+    - name: Render HTML report locally
+      ansible.builtin.template:
+        src: azure_visibility/cloud_report.html.j2
+        dest: "{{ azure_visibility_report_local_path }}"
+        mode: "0644"
+
+    - name: Upload report to blob storage
+      when:
+        - azure_visibility_publish_report | bool
+        - not ansible_check_mode
+      azure.azcollection.azure_rm_storageblob:
+        resource_group: "{{ azure_visibility_resource_group_name }}"
+        storage_account_name: "{{ azure_visibility_report_storage_account_name }}"
+        container: "{{ azure_visibility_report_container_name }}"
+        blob: "{{ azure_visibility_report_blob_name }}"
+        src: "{{ azure_visibility_report_local_path }}"
+        content_type: "text/html; charset=utf-8"
+        public_access: blob
+        force: true
+        auth_mode: login
+
+    - name: Set public report URL fact
+      when: azure_visibility_publish_report | bool and not ansible_check_mode
+      ansible.builtin.set_fact:
+        azure_visibility_report_url: >-
+          https://{{ azure_visibility_report_storage_account_name }}.blob.core.windows.net/{{ azure_visibility_report_container_name }}/{{ azure_visibility_report_blob_name }}
+
+    - name: Clear report URL when not publishing
+      when: not (azure_visibility_publish_report | bool) or ansible_check_mode
+      ansible.builtin.set_fact:
+        azure_visibility_report_url: ""
+
+    - name: Show report URL
+      ansible.builtin.debug:
+        msg: >-
+          Report URL: {{ azure_visibility_report_url if (azure_visibility_report_url | default('') | length > 0) else '(not published - see azure_visibility_publish_report / check mode)' }}
+
+    - name: Publish report URL for follow-on workflow jobs (AAP set_stats)
+      ansible.builtin.set_stats:
+        data:
+          report_url: "{{ azure_visibility_report_url | default('') }}"
+          report_local_path: "{{ azure_visibility_report_local_path }}"
+        per_host: false

@@ -1,0 +1,40 @@
+---
+# Post the Azure cloud report URL to ntfy (same mechanism as 05, different default topic/body).
+#
+# In an AAP workflow after playbook 10, set_stats exposes report_url to the next job template
+# as an extra variable (per Controller / set_stats behavior).
+#
+# Standalone: ansible-playbook .../11_send_ntfy_report_url.yml -e report_url=https://...
+#
+# Extra vars:
+#   report_url   - required unless injected from workflow after 10
+#   ntfy_server  - default ntfy.sh
+#   ntfy_topic   - default rh-azure-cloud-report
+#   ntfy_message - optional full body (default: Your cloud report is ready, url: <report_url>)
+#
+- name: Notify ntfy with Azure cloud report URL
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars/azure_visibility_defaults.yml
+  tasks:
+    - name: Require report URL
+      ansible.builtin.fail:
+        msg: >-
+          Set report_url (e.g. -e report_url=https://<account>.blob.core.windows.net/... )
+          or run after playbook 10 in a workflow so set_stats provides it.
+      when: report_url is not defined or (report_url | default('') | length == 0)
+
+    - name: Resolve ntfy parameters for include_tasks
+      ansible.builtin.set_fact:
+        ntfy_send_server: "{{ ntfy_server | default('ntfy.sh') }}"
+        ntfy_send_topic: "{{ ntfy_topic | default(azure_visibility_ntfy_topic) }}"
+        ntfy_send_message: "{{ ntfy_message | default('Your cloud report is ready, url: ' ~ report_url) }}"
+
+    - name: Send ntfy notification with report URL
+      ansible.builtin.include_tasks: tasks/ntfy_send.yml
+      vars:
+        ntfy_server: "{{ ntfy_send_server }}"
+        ntfy_topic: "{{ ntfy_send_topic }}"
+        ntfy_message: "{{ ntfy_send_message }}"

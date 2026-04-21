@@ -24,6 +24,8 @@ Workflow job templates can call these playbooks in order later; this document on
 | 03 | `03_create_container_apps_sample.yml` | `az acr import` (default: **ECR Public** mirror of `library/python`, not Docker Hub) + ARM: Log Analytics, Container Apps env, app |
 | 04 | `04_create_front_door_standard.yml` | Azure Front Door Standard profile, endpoint, origin (HTTPS to the app), default route |
 | 05 | `05_send_ntfy_deployment_url.yml` | POSTs the Front Door HTTPS URL to [ntfy](https://ntfy.sh) (default topic `rh-azure-aca-deployment`); optional after **04** |
+| 10 | `10_azure_storage_visibility_report.yml` | Lists storage accounts in one resource group, renders HTML, uploads to Blob (optional); `set_stats` publishes `report_url` for workflows |
+| 11 | `11_send_ntfy_report_url.yml` | POSTs `report_url` to ntfy (default topic `rh-azure-cloud-report`); run after **10** in a workflow or pass `-e report_url=...` |
 | 99 | `99_destroy_workload_resource_group.yml` | Deletes the whole resource group |
 
 Run from the **repository root** (`azure-demos/`) so paths match Ansible Runner conventions, for example:
@@ -77,6 +79,8 @@ If the browser shows Azure’s message that the **Front Door configuration could
 Reusable task files live under `project/tasks/`: **`ntfy_send.yml`** (generic `curl -d` equivalent over HTTPS) and **`front_door_set_url_facts.yml`** (reads the endpoint hostname from Azure). Playbook **05** wires them together; other playbooks can `include_tasks` the same files with their own `ntfy_message` or after setting `front_door_url` from a survey.
 
 For **Automation Controller / AAP** (job template, credential, workflow node, network), see **`JOB_WORKFLOW.md`** → section **“AAP: ntfy (playbook 05)”**.
+
+**Azure storage visibility (10–11):** Defaults live in `project/vars/azure_visibility_defaults.yml`. Playbook **10** needs the same Azure credential as other modules plus **Storage Blob Data Contributor** (or equivalent) on the target storage account when `azure_visibility_publish_report` is true. The uploaded HTML uses **anonymous blob read** for a simple URL in demos; tighten for production.
 
 ## Teardown
 
