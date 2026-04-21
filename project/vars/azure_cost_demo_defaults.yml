@@ -1,0 +1,28 @@
+---
+# Cost / Blob archive demo (playbooks 10, 12–14). Blob scope only; uses same RG as workload.
+# Threshold is minutes (not days) so rehearsing the demo does not require waiting 30 days.
+
+# When true, playbook 10 lists blobs under the hot container/prefix and surfaces stale ones in the HTML report.
+azure_cost_demo_enabled: true
+
+# Must match (or override) the storage account used by the ACA demo stack.
+azure_cost_demo_storage_account_name: "acaansibledemo001"
+
+# One account, two containers: hot landing zone + optional archive container (created by 12).
+azure_cost_demo_hot_container: "democost-hot"
+azure_cost_demo_archive_container: "democost-archive"
+# Only blobs with this name prefix are scanned (keeps `az blob list` small).
+azure_cost_demo_hot_blob_prefix: "candidates/"
+
+# Blobs whose last modification time is older than this many minutes are flagged in the report (demo-friendly).
+# Set to 0 to treat every Hot/Cool blob under the prefix as stale immediately (good for live demos without waiting).
+azure_cost_demo_age_minutes: 5
+
+# Seeded by playbook 12 under prefix + this file name.
+azure_cost_demo_seed_blob_name: "cost-demo-seed.txt"
+
+# ntfy topic for playbook 14 (override with -e ntfy_topic=... in JT).
+azure_cost_demo_ntfy_topic: "rh-azure-cost-demo"
+
+# When true, playbook 13 only prints what it would tier (no az set-tier).
+azure_cost_demo_dry_run: false

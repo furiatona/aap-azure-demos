@@ -43,6 +43,15 @@
         kind: StorageV2
         primary_endpoints:
           blob: "https://legacyflat.blob.core.windows.net/"
+    azure_cost_demo_enabled: true
+    azure_cost_demo_age_minutes: 5
+    azure_cost_demo_hot_container: democost-hot
+    azure_cost_demo_hot_blob_prefix: "candidates/"
+    azure_cost_demo_blob_inventory_error: ""
+    azure_cost_demo_stale_blobs:
+      - name: candidates/cost-demo-seed.txt
+        lastModified: "2026-01-01T12:00:00+00:00"
+        accessTier: Hot
   tasks:
     - name: Ensure output directory exists
       ansible.builtin.file:

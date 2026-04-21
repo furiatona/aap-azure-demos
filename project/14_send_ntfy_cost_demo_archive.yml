@@ -1,0 +1,37 @@
+---
+# Notify ntfy after playbook 13 (set_stats passes cost_demo_* into the next workflow node on AAP).
+#
+# Extra vars (from workflow / -e):
+#   cost_demo_archived_count, cost_demo_archived_blob_names, cost_demo_dry_run (optional)
+#   ntfy_server, ntfy_topic (default azure_cost_demo_ntfy_topic)
+#
+- name: Notify ntfy cost demo archive result
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars/azure_cost_demo_defaults.yml
+  tasks:
+    - name: Resolve ntfy parameters for include_tasks
+      ansible.builtin.set_fact:
+        ntfy_send_server: "{{ ntfy_server | default('ntfy.sh') }}"
+        ntfy_send_topic: "{{ ntfy_topic | default(azure_cost_demo_ntfy_topic) }}"
+        ntfy_send_message: "{{ ntfy_message | default(
+          (
+            'Cost demo DRY RUN — no tier changes. Candidate blob(s) (would Archive): '
+            ~ (cost_demo_archived_blob_names | default('(none)', true))
+            ~ ' (count ' ~ (cost_demo_candidate_count | default(0) | string) ~ ')'
+          )
+          if (cost_demo_dry_run | default(false) | bool)
+          else (
+            'Cost demo: set ' ~ (cost_demo_archived_count | default(0) | string) ~ ' blob(s) to Archive tier: '
+            ~ (cost_demo_archived_blob_names | default('', true))
+          )
+        ) }}"
+
+    - name: Send ntfy notification
+      ansible.builtin.include_tasks: tasks/ntfy_send.yml
+      vars:
+        ntfy_server: "{{ ntfy_send_server }}"
+        ntfy_topic: "{{ ntfy_send_topic }}"
+        ntfy_message: "{{ ntfy_send_message }}"

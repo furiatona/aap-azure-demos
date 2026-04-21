@@ -78,9 +78,24 @@ To send the **Front Door HTTPS URL** to **ntfy** (`ntfy.sh/rh-azure-aca-deployme
 
 **Combined in one Controller workflow:** After **04** (and optional **05**), add nodes **10 → 11** on success so operators get the **visibility** Front Door URL (different hostname than the demo app endpoint).
 
-**`set_stats` from 10 for downstream jobs:** `report_url` (visibility Front Door HTTPS), `report_local_path`, `visibility_container_app_url` (direct ACA URL for the report app).
+**`set_stats` from 10 for downstream jobs:** `report_url` (visibility Front Door HTTPS), `report_local_path`, `visibility_container_app_url` (direct ACA URL for the report app), plus optional cost-demo hints: `cost_demo_stale_blob_count`, `cost_demo_storage_account`, `cost_demo_hot_container`.
 
-**Variables:** `project/vars/azure_visibility_defaults.yml` (visibility app name, ARM deployment name, FD names). Override `aca_visibility_container_app_name` / `azure_visibility_frontdoor_endpoint_name` if Azure reports a naming conflict.
+**Variables:** `project/vars/azure_visibility_defaults.yml` (visibility app name, ARM deployment name, FD names). Override `aca_visibility_container_app_name` / `azure_visibility_frontdoor_endpoint_name` if Azure reports a naming conflict. Blob cost demo knobs: `project/vars/azure_cost_demo_defaults.yml` (`azure_cost_demo_age_minutes`, containers, prefix).
+
+### Optional blob cost demo (12–14)
+
+FinOps-style **Blob** demo (minutes-based “staleness”, not days): **10** can show callouts in the **Storage accounts (detail)** card when Hot/Cool blobs under `democost-hot/candidates/` are older than `azure_cost_demo_age_minutes`. **12** creates containers + seeds a file; **13** sets **Archive** tier on stale blobs; **14** posts ntfy.
+
+Suggested Controller chain (after **04** exists, same credential/EE with **`az`** and **Blob Data** roles on the storage account):
+
+1. **10** — visibility report (includes blob scan when `azure_cost_demo_enabled` is true).
+2. **11** — report URL to ntfy (unchanged).
+3. **Approval** — human gate before any write to storage beyond seeding.
+4. **12** — `project/12_ensure_cost_demo_storage.yml` (containers + seed blob).
+5. **13** — `project/13_archive_cost_demo_blobs.yml` (optional `-e azure_cost_demo_dry_run=true` on the job template for plan-only).
+6. **14** — `project/14_send_ntfy_cost_demo_archive.yml` (reads `set_stats` from **13**: `cost_demo_archived_count`, `cost_demo_archived_blob_names`, `cost_demo_dry_run`).
+
+**RBAC:** Service principal needs **Storage Blob Data Reader** for **10**/**13** list, and **Storage Blob Data Contributor** for **12** upload and **13** `set-tier`. **Rehearse timing:** wait at least `azure_cost_demo_age_minutes` after **12** (or lower the threshold in extra vars) before **10** or **13** so the seed blob qualifies as “stale.”
 
 ---
 
@@ -136,6 +151,7 @@ flowchart TB
 | **04** → **05** | **No** (optional **05**) | **05** is notification only; chain after **04** if your EE can reach **ntfy.sh**. |
 | **04** → **10** | **No** | **10** needs the **FD profile** and **ACA env** from **04**/**03**; it adds a second ACA and a second FD endpoint (same EE needs **`az`** as **03**). |
 | **10** → **11** | **No** (optional **11**) | **11** is ntfy only; chain after **10** on success. |
+| **11** → **Approval** → **12** → **13** → **14** | **No** | Optional **Blob cost demo** chain; keep sequential. Use **Approval** before **12** if you want the report-first, approve-second story. |
 | **99** (destroy) | **Separate workflow** | Do not chain **99** in the provision workflow. Use another workflow and job template for teardown so a routine provision run never ends in destroy. |
 
 **Summary:** The only **parallel** slice in the provision path is **Job Template 01** and **Job Template 02** immediately after **00**. Everything else is strictly sequential.

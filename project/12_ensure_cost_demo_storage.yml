@@ -1,0 +1,122 @@
+---
+# Demo prep: ensure hot + archive blob containers exist and seed a small blob under candidates/.
+# Run after visibility stack exists (same RG as workload). Requires SP with Storage Blob Data Contributor.
+#
+# Workflow hint: place an AAP Approval node before this job in production-like demos.
+#
+- name: Ensure cost demo blob containers and seed blob
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars/container_workload_defaults.yml
+    - vars/azure_cost_demo_defaults.yml
+  tasks:
+    - name: Azure CLI login for storage commands
+      ansible.builtin.include_tasks: tasks/azure_cli_sp_login.yml
+
+    - name: Check hot container exists
+      ansible.builtin.command:
+        argv:
+          - az
+          - storage
+          - container
+          - exists
+          - "--name"
+          - "{{ azure_cost_demo_hot_container }}"
+          - "--account-name"
+          - "{{ azure_cost_demo_storage_account_name }}"
+          - "--auth-mode"
+          - login
+          - "-o"
+          - json
+      register: azure_cost_demo_hot_exists_cmd
+      changed_when: false
+      failed_when: false
+
+    - name: Record whether hot container exists
+      ansible.builtin.set_fact:
+        azure_cost_demo_hot_exists: >-
+          {{
+            ((azure_cost_demo_hot_exists_cmd.stdout | default('{}', true)) | from_json).get('exists', false)
+            if (azure_cost_demo_hot_exists_cmd.rc | int) == 0
+            else false
+          }}
+
+    - name: Create hot container when missing
+      ansible.builtin.command:
+        argv:
+          - az
+          - storage
+          - container
+          - create
+          - "--name"
+          - "{{ azure_cost_demo_hot_container }}"
+          - "--account-name"
+          - "{{ azure_cost_demo_storage_account_name }}"
+          - "--auth-mode"
+          - login
+      when: not (azure_cost_demo_hot_exists | bool)
+      register: azure_cost_demo_hot_create
+      changed_when: azure_cost_demo_hot_create.rc == 0
+
+    - name: Check archive container exists
+      ansible.builtin.command:
+        argv:
+          - az
+          - storage
+          - container
+          - exists
+          - "--name"
+          - "{{ azure_cost_demo_archive_container }}"
+          - "--account-name"
+          - "{{ azure_cost_demo_storage_account_name }}"
+          - "--auth-mode"
+          - login
+          - "-o"
+          - json
+      register: azure_cost_demo_arc_exists_cmd
+      changed_when: false
+      failed_when: false
+
+    - name: Record whether archive container exists
+      ansible.builtin.set_fact:
+        azure_cost_demo_archive_exists: >-
+          {{
+            ((azure_cost_demo_arc_exists_cmd.stdout | default('{}', true)) | from_json).get('exists', false)
+            if (azure_cost_demo_arc_exists_cmd.rc | int) == 0
+            else false
+          }}
+
+    - name: Create archive container when missing
+      ansible.builtin.command:
+        argv:
+          - az
+          - storage
+          - container
+          - create
+          - "--name"
+          - "{{ azure_cost_demo_archive_container }}"
+          - "--account-name"
+          - "{{ azure_cost_demo_storage_account_name }}"
+          - "--auth-mode"
+          - login
+      when: not (azure_cost_demo_archive_exists | bool)
+      register: azure_cost_demo_arc_create
+      changed_when: azure_cost_demo_arc_create.rc == 0
+
+    - name: Seed demo blob with UTC timestamp (overwrite ok)
+      ansible.builtin.shell: |
+        set -euo pipefail
+        MSG="cost-demo seed UTC $(date -u +%Y-%m-%dT%H:%M:%SZ) (ansible)"
+        printf '%s\n' "$MSG" | az storage blob upload \
+          --account-name "{{ azure_cost_demo_storage_account_name }}" \
+          --container-name "{{ azure_cost_demo_hot_container }}" \
+          --name "{{ azure_cost_demo_hot_blob_prefix }}{{ azure_cost_demo_seed_blob_name }}" \
+          --data @- \
+          --auth-mode login \
+          --overwrite
+      args:
+        executable: /bin/bash
+      register: azure_cost_demo_seed
+      changed_when: true

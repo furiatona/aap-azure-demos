@@ -15,6 +15,7 @@
   vars_files:
     - vars/container_workload_defaults.yml
     - vars/azure_visibility_defaults.yml
+    - vars/azure_cost_demo_defaults.yml
   vars:
     visibility_arm_file: "{{ playbook_dir }}/templates/container_workload/arm_container_app_visibility_only.json"
   tasks:
@@ -58,6 +59,23 @@
       ansible.builtin.set_fact:
         azure_visibility_subscription_hint: >-
           {{ lookup('ansible.builtin.env', 'AZURE_SUBSCRIPTION_ID', errors='ignore') | default('', true) }}
+
+    - name: Initialize cost demo blob facts for HTML template
+      ansible.builtin.set_fact:
+        azure_cost_demo_stale_blobs: []
+        azure_cost_demo_blob_inventory_error: ""
+
+    - name: Discover cost-demo stale blobs for report (Blob Data Reader + az login)
+      when:
+        - not ansible_check_mode
+        - azure_cost_demo_enabled | default(false) | bool
+      block:
+        - ansible.builtin.include_tasks: tasks/azure_cli_sp_login.yml
+        - ansible.builtin.include_tasks: tasks/azure_cost_demo_blob_inventory.yml
+      rescue:
+        - ansible.builtin.set_fact:
+            azure_cost_demo_stale_blobs: []
+            azure_cost_demo_blob_inventory_error: "{{ ansible_failed_result.msg | default('cost demo blob inventory failed', true) }}"
 
     - name: Render HTML report locally
       ansible.builtin.template:
@@ -206,6 +224,9 @@
           report_local_path: "{{ azure_visibility_report_local_path }}"
           visibility_container_app_url: >-
             {{ ('https://' ~ aca_visibility_app_fqdn) if (aca_visibility_app_fqdn | default('') | length > 0) else '' }}
+          cost_demo_stale_blob_count: "{{ azure_cost_demo_stale_blobs | default([]) | length }}"
+          cost_demo_storage_account: "{{ azure_cost_demo_storage_account_name }}"
+          cost_demo_hot_container: "{{ azure_cost_demo_hot_container }}"
         per_host: false
 
     - name: Check mode notice

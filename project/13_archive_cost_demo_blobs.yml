@@ -1,0 +1,60 @@
+---
+# Set blob access tier to Archive for stale Hot/Cool blobs under the demo prefix (same container).
+# Run after 12 and after waiting at least azure_cost_demo_age_minutes from seed/upload (or lower the minutes in vars).
+#
+# Extra vars: azure_cost_demo_dry_run=true to print targets only (no tier change).
+#
+- name: Tier stale demo blobs to Archive
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars/container_workload_defaults.yml
+    - vars/azure_cost_demo_defaults.yml
+  tasks:
+    - name: Azure CLI login for storage commands
+      ansible.builtin.include_tasks: tasks/azure_cli_sp_login.yml
+
+    - name: Refresh stale blob list
+      ansible.builtin.include_tasks: tasks/azure_cost_demo_blob_inventory.yml
+
+    - name: Show dry-run plan
+      ansible.builtin.debug:
+        msg: >-
+          DRY RUN: would set tier Archive on {{ azure_cost_demo_stale_blobs | default([]) | length }} blob(s):
+          {{ azure_cost_demo_stale_blobs | default([]) | map(attribute='name') | list | join(', ') }}
+      when: azure_cost_demo_dry_run | default(false) | bool
+
+    - name: Set blob tier to Archive (Entra auth)
+      ansible.builtin.command:
+        argv:
+          - az
+          - storage
+          - blob
+          - set-tier
+          - "--auth-mode"
+          - login
+          - "--account-name"
+          - "{{ azure_cost_demo_storage_account_name }}"
+          - "--container-name"
+          - "{{ azure_cost_demo_hot_container }}"
+          - "--name"
+          - "{{ item.name }}"
+          - "--tier"
+          - Archive
+      loop: "{{ azure_cost_demo_stale_blobs | default([]) }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: not (azure_cost_demo_dry_run | default(false) | bool)
+      register: azure_cost_demo_tier_results
+      changed_when: true
+
+    - name: Publish archive results for follow-on ntfy job (AAP set_stats)
+      when: not ansible_check_mode
+      ansible.builtin.set_stats:
+        data:
+          cost_demo_candidate_count: "{{ azure_cost_demo_stale_blobs | default([]) | length }}"
+          cost_demo_archived_count: "{{ 0 if (azure_cost_demo_dry_run | default(false) | bool) else (azure_cost_demo_stale_blobs | default([]) | length) }}"
+          cost_demo_archived_blob_names: "{{ azure_cost_demo_stale_blobs | default([]) | map(attribute='name') | join(',') }}"
+          cost_demo_dry_run: "{{ azure_cost_demo_dry_run | default(false) | bool }}"
+        per_host: false

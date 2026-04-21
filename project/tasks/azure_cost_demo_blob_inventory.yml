@@ -1,0 +1,110 @@
+---
+# Sets facts for the visibility report and for playbook 13:
+#   azure_cost_demo_stale_blobs  — list of dicts: { name, lastModified } (blob path within container)
+#   azure_cost_demo_blob_inventory_error — short error string when list/filter fails (optional)
+#
+# Requires: Azure CLI session (include azure_cli_sp_login.yml before this task file).
+# Auth: --auth-mode login (Entra ID) — grant the SP "Storage Blob Data Reader" on the storage account.
+#
+- name: List blobs under demo prefix (JSON)
+  ansible.builtin.command:
+    argv:
+      - az
+      - storage
+      - blob
+      - list
+      - "--auth-mode"
+      - login
+      - "--account-name"
+      - "{{ azure_cost_demo_storage_account_name }}"
+      - "--container-name"
+      - "{{ azure_cost_demo_hot_container }}"
+      - "--prefix"
+      - "{{ azure_cost_demo_hot_blob_prefix }}"
+      - "-o"
+      - json
+  register: azure_cost_demo_blob_list_cmd
+  changed_when: false
+  failed_when: false
+
+- name: No blob list (container missing or no access) — empty candidates
+  ansible.builtin.set_fact:
+    azure_cost_demo_stale_blobs: []
+    azure_cost_demo_blob_inventory_error: "{{ azure_cost_demo_blob_list_cmd.stderr | default('', true) | trim }}"
+  when: azure_cost_demo_blob_list_cmd.rc != 0
+
+- name: Filter stale Hot/Cool blobs by last-modified age (minutes) and tier
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "-c"
+      - |
+        import json, os, sys
+        from datetime import datetime, timezone, timedelta
+        raw = json.loads(sys.stdin.read() or "[]")
+        minutes = int(os.environ.get("AZURE_COST_DEMO_AGE_MINUTES", "5"))
+        now = datetime.now(timezone.utc)
+        # minutes <= 0 means "flag every Hot/Cool blob in prefix" for instant lab demos.
+        cut = now - timedelta(minutes=minutes) if minutes > 0 else now + timedelta(seconds=30)
+        out = []
+
+        def parse_last_modified(lm_s):
+            """Azure sometimes returns 7-digit fractional seconds; normalize for fromisoformat."""
+            if not lm_s:
+                raise ValueError("empty lastModified")
+            s = lm_s.strip().replace("Z", "+00:00")
+            if "." in s and ("+" in s or s.count("-") >= 3):
+                dot = s.index(".")
+                plus = s.rfind("+")
+                minus_tz = s.rfind("-", dot)
+                tz_at = plus if plus > dot else (minus_tz if minus_tz > dot else -1)
+                if tz_at > dot:
+                    frac = s[dot + 1 : tz_at]
+                    dig = "".join(ch for ch in frac if ch.isdigit())
+                    digits = (dig + "000000")[:6]
+                    s = s[: dot + 1] + digits + s[tz_at:]
+            return datetime.fromisoformat(s)
+
+        for b in raw:
+            try:
+                props = b.get("properties") or {}
+                tier = (props.get("accessTier") or props.get("blobTier") or "Hot")
+                if tier in ("Archive", "Cold"):
+                    continue
+                lm_s = props.get("lastModified") or ""
+                lm = parse_last_modified(lm_s)
+                if lm <= cut:
+                    out.append({"name": b.get("name", ""), "lastModified": lm_s, "accessTier": tier})
+            except Exception:
+                continue
+        json.dump(out, sys.stdout)
+    stdin: "{{ azure_cost_demo_blob_list_cmd.stdout | default('[]', true) }}"
+  environment:
+    AZURE_COST_DEMO_AGE_MINUTES: "{{ azure_cost_demo_age_minutes | int }}"
+  register: azure_cost_demo_stale_cmd
+  changed_when: false
+  failed_when: false
+  when: azure_cost_demo_blob_list_cmd.rc == 0
+
+- name: Record stale blob facts from filter
+  ansible.builtin.set_fact:
+    azure_cost_demo_stale_blobs: >-
+      {{
+        []
+        if ((azure_cost_demo_stale_cmd.stdout | default('', true) | trim) | length) == 0
+        else (azure_cost_demo_stale_cmd.stdout | trim | from_json)
+      }}
+    azure_cost_demo_blob_inventory_error: "{{ azure_cost_demo_stale_cmd.stderr | default('', true) | trim }}"
+  when:
+    - azure_cost_demo_blob_list_cmd.rc == 0
+    - azure_cost_demo_stale_cmd is defined
+    - (azure_cost_demo_stale_cmd.rc | default(1)) == 0
+
+- name: Fallback empty stale list when filter failed
+  ansible.builtin.set_fact:
+    azure_cost_demo_stale_blobs: []
+    azure_cost_demo_blob_inventory_error: "{{ azure_cost_demo_stale_cmd.stderr | default(azure_cost_demo_stale_cmd.msg | default('filter failed', true), true) }}"
+  when:
+    - azure_cost_demo_blob_list_cmd.rc == 0
+    - azure_cost_demo_stale_cmd is defined
+    - (azure_cost_demo_stale_cmd.rc | default(1)) != 0

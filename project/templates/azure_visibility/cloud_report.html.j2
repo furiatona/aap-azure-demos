@@ -113,6 +113,18 @@
       border: 1px solid #c7e4f8;
     }
     .tags-muted { color: var(--muted); font-size: 0.8rem; }
+    .demo-cost-wrap { padding: 0 1rem 1rem; border-top: 1px solid var(--border); background: #fffdf6; }
+    .demo-cost-alert {
+      margin: 0.65rem 0 0;
+      padding: 0.65rem 0.75rem;
+      border: 1px solid #e6c200;
+      border-radius: 6px;
+      background: #fffbea;
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+    .demo-cost-alert .mono { font-size: 0.8rem; }
+    .demo-cost-err { margin: 0.65rem 0 0; color: #a4262c; font-size: 0.85rem; }
     a { color: var(--azure-blue); text-decoration: none; }
     a:hover { text-decoration: underline; }
     details.card { padding: 0; }
@@ -269,7 +281,7 @@
       <div class="card">
         <div class="section-header">
           <h2><i class="fa-solid fa-hard-drive" aria-hidden="true"></i> Storage accounts (detail)</h2>
-          <p>From storage account API — SKU, kind, access tier, and blob endpoint.</p>
+          <p>From storage account API — SKU, kind, access tier, and blob endpoint. Cost demo callouts (below) use blob list + age in minutes.</p>
         </div>
         <div class="table-wrap">
           <table class="data">
@@ -308,6 +320,26 @@
             </tbody>
           </table>
         </div>
+{% if azure_cost_demo_enabled | default(false) %}
+        <div class="demo-cost-wrap">
+{% if (azure_cost_demo_blob_inventory_error | default('') | length) > 0 %}
+          <p class="demo-cost-err"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Blob scan failed: <span class="mono">{{ azure_cost_demo_blob_inventory_error }}</span> (needs Storage Blob Data Reader + <span class="mono">az login</span>).</p>
+{% endif %}
+{% for c in (azure_cost_demo_stale_blobs | default([])) %}
+          <div class="demo-cost-alert" role="status">
+            <strong>File <span class="mono">{{ c.name | default('', true) | e }}</span></strong> — last modified <time datetime="{{ c.lastModified | default('', true) | e }}">{{ c.lastModified | default('', true) | e }}</time>.
+            Older than <strong>{{ azure_cost_demo_age_minutes | default(5) }}</strong> minute(s) (demo rule). <strong>Considering move to Archive</strong> on Azure Blob.
+            Check your <strong>Ansible Automation Platform workflow</strong> to approve the change (e.g. job templates <span class="mono">12_ensure_cost_demo_storage</span> → <span class="mono">13_archive_cost_demo_blobs</span> after an approval node).
+          </div>
+{% endfor %}
+{% if ((azure_cost_demo_stale_blobs | default([]) | length) == 0) and ((azure_cost_demo_blob_inventory_error | default('') | length) == 0) %}
+          <p class="tags-muted" style="margin: 0.65rem 0 0;">
+            Cost demo: no Hot/Cool blobs under <span class="mono">{{ azure_cost_demo_hot_container | default('democost-hot') }}/{{ azure_cost_demo_hot_blob_prefix | default('candidates/') }}</span>
+            older than <strong>{{ azure_cost_demo_age_minutes | default(5) }}</strong> min. Run <span class="mono">12_ensure_cost_demo_storage.yml</span>, wait past the threshold, then re-run this report.
+          </p>
+{% endif %}
+        </div>
+{% endif %}
       </div>
     </section>
 
