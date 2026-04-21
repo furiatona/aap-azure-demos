@@ -70,7 +70,7 @@
               - "--name"
               - "{{ aca_acr_name }}"
               - "--source"
-              - "docker.io/library/python:3.12-alpine"
+              - "{{ aca_image_import_source }}"
               - "--image"
               - "{{ aca_acr_repository }}:{{ aca_acr_image_tag }}"
               - "--force"
@@ -81,9 +81,10 @@
         - name: Fail with hint when ACR import did not succeed
           ansible.builtin.fail:
             msg: >-
-              Azure CLI could not import docker.io/library/python:3.12-alpine into {{ aca_acr_name }}.
-              Ensure the job has an Azure Resource Manager credential (AZURE_CLIENT_ID / AZURE_SECRET / AZURE_TENANT),
-              or run 'az login' on the controller for local runs. CLI stderr: {{ aca_import.stderr | default('') }}
+              Azure CLI could not import {{ aca_image_import_source }} into {{ aca_acr_name }}.
+              If you see Docker Hub TOOMANYREQUESTS / 429, use default aca_image_import_source (ECR Public mirror) or set aca_image_import_source
+              to an authenticated registry. Ensure an Azure RM credential is on the job (AZURE_CLIENT_ID / AZURE_SECRET / AZURE_TENANT) or az login locally.
+              CLI stderr: {{ aca_import.stderr | default('') }}
           when: aca_import.rc != 0
 
         - name: Load ARM template for Log Analytics, Container Apps environment, and app

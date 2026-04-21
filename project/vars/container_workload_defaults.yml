@@ -27,6 +27,9 @@ aca_frontdoor_route_name: "aca-demo-route"
 
 aca_arm_deployment_name: "aca-sample-stack"
 
-# Image imported into ACR (playbook 03) from Docker Hub.
+# Image copied into ACR (playbook 03). Default is AWS ECR Public mirror of official library/python
+# (avoids Docker Hub anonymous pull rate limits / 429 TOOMANYREQUESTS).
+# Override with e.g. docker.io/library/python:3.12-alpine plus Docker Hub auth if you prefer.
+aca_image_import_source: "public.ecr.aws/docker/library/python:3.12-alpine"
 aca_acr_repository: "python"
 aca_acr_image_tag: "3.12-alpine"

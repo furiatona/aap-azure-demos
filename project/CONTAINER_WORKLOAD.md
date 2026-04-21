@@ -21,7 +21,7 @@ Workflow job templates can call these playbooks in order later; this document on
 | 00 | `00_create_workload_resource_group.yml` | Resource group |
 | 01 | `01_create_storage_and_acr.yml` | Storage account + Azure Container Registry (admin enabled for demo pulls) |
 | 02 | `02_create_azure_sql.yml` | Azure SQL logical server, Basic database, firewall rule for Azure services |
-| 03 | `03_create_container_apps_sample.yml` | `az acr import` + ARM deployment: Log Analytics, Container Apps environment, public Container App |
+| 03 | `03_create_container_apps_sample.yml` | `az acr import` (default: **ECR Public** mirror of `library/python`, not Docker Hub) + ARM: Log Analytics, Container Apps env, app |
 | 04 | `04_create_front_door_standard.yml` | Azure Front Door Standard profile, endpoint, origin (HTTPS to the app), default route |
 | 99 | `99_destroy_workload_resource_group.yml` | Deletes the whole resource group |
 
@@ -53,7 +53,7 @@ Important names:
 ## Application content
 
 - HTML is rendered from `project/templates/container_workload/demo_index.html.j2` (Red Hat fonts, simple layout, resource table).
-- The Container App runs **`python:3.12-alpine`** from your ACR; startup decodes a **base64** page payload stored as an app **secret** (see ARM template `project/templates/container_workload/arm_container_app.json.j2`).
+- The Container App runs **`python:3.12-alpine`** in ACR (layers imported from **`aca_image_import_source`**, default `public.ecr.aws/docker/library/python:3.12-alpine` to avoid Docker Hub anonymous rate limits). Startup decodes a **base64** page payload stored as an app **secret** (see ARM template `project/templates/container_workload/arm_container_app.json.j2`).
 - The page uses **JavaScript** to show `location.hostname` so you can see whether you hit the app **directly** (`*.azurecontainerapps.io`) or via **Front Door** (`*.azurefd.net`) after playbook 04.
 
 ## Front Door and “firewall”
