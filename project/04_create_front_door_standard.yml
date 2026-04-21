@@ -39,7 +39,8 @@
       azure.azcollection.azure_rm_cdnprofile:
         resource_group: "{{ container_workload_resource_group_name }}"
         name: "{{ aca_frontdoor_profile_name }}"
-        location: "{{ container_workload_region }}"
+        # standard_azurefrontdoor / premium_azurefrontdoor SKUs require location global (not eastus, etc.).
+        location: global
         sku: standard_azurefrontdoor
 
     - name: Create AFD endpoint

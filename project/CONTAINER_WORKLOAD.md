@@ -58,7 +58,7 @@ Important names:
 
 ## Front Door and “firewall”
 
-Playbook **04** uses **Azure Front Door Standard** (`standard_azurefrontdoor` on a CDN profile). That is the usual “edge” entry in solution diagrams. **Web Application Firewall** policies are a **Premium** concern; this sample does not attach a WAF policy so the template stays small. You can extend playbook 04 later with `azure_rm_afdruleset` and related modules if you move to Premium.
+Playbook **04** uses **Azure Front Door Standard** (`standard_azurefrontdoor` on a CDN profile). The CDN **profile** must be created with **`location: global`** (required by that SKU; it still lives in your resource group). **Web Application Firewall** policies are a **Premium** concern; this sample does not attach a WAF policy so the template stays small. You can extend playbook 04 later with `azure_rm_afdruleset` and related modules if you move to Premium.
 
 ## Teardown
 
