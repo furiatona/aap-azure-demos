@@ -14,6 +14,8 @@ azure_visibility_publish_report: true
 # Blob data-plane auth: key = account key (needs Microsoft.Storage/storageAccounts/listKeys/action on the account;
 # typical for Contributor on the RG). login = Entra ID (needs Storage Blob Data Contributor on the account).
 azure_visibility_blob_auth_mode: key
+# Read SAS lifetime for the report URL (hours). Shorter is safer if URLs are shared in chat.
+azure_visibility_sas_validity_hours: 168
 
 # Default ntfy topic for playbook 11 (override with -e ntfy_topic=...).
 azure_visibility_ntfy_topic: "rh-azure-cloud-report"

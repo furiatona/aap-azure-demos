@@ -80,7 +80,7 @@ Reusable task files live under `project/tasks/`: **`ntfy_send.yml`** (generic `c
 
 For **Automation Controller / AAP** (job template, credential, workflow node, network), see **`JOB_WORKFLOW.md`** → section **“AAP: ntfy (playbook 05)”**.
 
-**Azure storage visibility (10–11):** Defaults live in `project/vars/azure_visibility_defaults.yml`. For blob upload, **10** defaults to **`azure_visibility_blob_auth_mode: key`** (uses the storage account key via `listKeys`), which usually matches the same service principal that already has **Contributor** on the resource group from playbooks **00–01**. If the storage account **disables shared key access**, switch to **`azure_visibility_blob_auth_mode: login`** and grant **Storage Blob Data Contributor** on that account. The uploaded HTML uses **anonymous blob read** for a simple URL in demos; tighten for production.
+**Azure storage visibility (10–11):** Defaults live in `project/vars/azure_visibility_defaults.yml`. Playbook **10** uploads the HTML to a **private** blob container (no anonymous access), then builds a **read-only SAS URL** via `project/scripts/generate_blob_read_sas.py` (needs **`azure-storage-blob`** in the execution environment, same as `azure_rm_storageblob`). SAS lifetime is **`azure_visibility_sas_validity_hours`** (default 168). Blob upload still defaults to **`azure_visibility_blob_auth_mode: key`**. If the account **disables shared key access**, you must extend the playbook (e.g. user-delegation SAS) or set **`azure_visibility_publish_report`** false and host the file elsewhere.
 
 ## Teardown
 

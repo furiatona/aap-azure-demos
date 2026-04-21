@@ -2,12 +2,11 @@
 # Azure visibility (phase 1): HTML report of storage accounts in one resource group.
 # Mirrors the spirit of awsinfravis25 playbooks/cloud_report.yml (gather -> template -> publish).
 #
-# Publish: uploads HTML to Blob Storage so playbook 11 (or humans) can share a stable HTTPS URL.
-# Lab default uses a blob container with anonymous read at the blob level (public_access: blob).
-# Blob upload uses auth_mode key (account key via listKeys) so the same SP as playbook 01
-# (Contributor on the RG) usually works. If the account disables shared key access, set
-# azure_visibility_blob_auth_mode: login and grant Storage Blob Data Contributor on the account.
-# For production, prefer private blobs + SAS and adjust this playbook later.
+# Publish: uploads HTML to a private blob container, then builds a time-limited read SAS URL
+# (works when the storage account disallows public blob access).
+# Blob upload uses auth_mode key (account key) by default; SAS helper needs the same key from ARM.
+# If shared key access is disabled on the account, set azure_visibility_blob_auth_mode: login,
+# grant Storage Blob Data Contributor, and extend this playbook (user-delegation SAS) later.
 #
 # Extra vars: override any key from vars/azure_visibility_defaults.yml
 #
@@ -40,7 +39,78 @@
         dest: "{{ azure_visibility_report_local_path }}"
         mode: "0644"
 
-    - name: Upload report to blob storage
+    - name: Fetch report storage account keys for SAS (management plane)
+      when:
+        - azure_visibility_publish_report | bool
+        - not ansible_check_mode
+      azure.azcollection.azure_rm_storageaccount_info:
+        resource_group: "{{ azure_visibility_resource_group_name }}"
+        name: "{{ azure_visibility_report_storage_account_name }}"
+        show_connection_string: true
+        auth_mode: login
+      register: _visibility_report_sa_info
+      no_log: true
+
+    - name: Resolve blob endpoint key material for SAS helper
+      when:
+        - azure_visibility_publish_report | bool
+        - not ansible_check_mode
+      ansible.builtin.set_fact:
+        _visibility_report_sa0: "{{ (_visibility_report_sa_info.storageaccounts | default(_visibility_report_sa_info.azure_storageaccounts))[0] }}"
+      no_log: true
+
+    - name: Normalize primary blob endpoint metadata
+      when:
+        - azure_visibility_publish_report | bool
+        - not ansible_check_mode
+      ansible.builtin.set_fact:
+        _visibility_blob_meta: "{{ (_visibility_report_sa0.primary_endpoints | default({}, true)).blob | default({}, true) }}"
+      no_log: true
+      no_log: true
+
+    - name: Extract account key for SAS generation
+      when:
+        - azure_visibility_publish_report | bool
+        - not ansible_check_mode
+      ansible.builtin.set_fact:
+        report_blob_account_key: >-
+          {{
+            (
+              _visibility_blob_meta.key
+              | default(
+                  (
+                    (
+                      _visibility_blob_meta.connectionstring
+                      | default(_visibility_blob_meta.connectionString | default('', true), true)
+                    ).split('AccountKey=')[1]
+                  ).split(';')[0]
+                  if (
+                    'AccountKey='
+                    in (
+                      _visibility_blob_meta.connectionstring
+                      | default(_visibility_blob_meta.connectionString | default('', true), true)
+                    )
+                  )
+                  else ''
+                ),
+                true,
+              )
+            )
+          }}
+      no_log: true
+
+    - name: Fail when storage account key cannot be read (SAS path requires listKeys / connection string)
+      when:
+        - azure_visibility_publish_report | bool
+        - not ansible_check_mode
+        - (report_blob_account_key | default('') | length) == 0
+      ansible.builtin.fail:
+        msg: >-
+          Could not read storage account key for {{ azure_visibility_report_storage_account_name }}.
+          Ensure the credential can list keys and the account allows shared key access, or set
+          azure_visibility_publish_report to false and distribute the HTML path manually.
+
+    - name: Upload report to blob storage (private container)
       when:
         - azure_visibility_publish_report | bool
         - not ansible_check_mode
@@ -51,15 +121,32 @@
         blob: "{{ azure_visibility_report_blob_name }}"
         src: "{{ azure_visibility_report_local_path }}"
         content_type: "text/html; charset=utf-8"
-        public_access: blob
         force: true
         auth_mode: "{{ azure_visibility_blob_auth_mode }}"
 
-    - name: Set public report URL fact
-      when: azure_visibility_publish_report | bool and not ansible_check_mode
+    - name: Build HTTPS read URL with SAS for private blob
+      when:
+        - azure_visibility_publish_report | bool
+        - not ansible_check_mode
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ playbook_dir }}/scripts/generate_blob_read_sas.py"
+      environment:
+        AZ_REPORT_ACCOUNT_NAME: "{{ azure_visibility_report_storage_account_name }}"
+        AZ_REPORT_ACCOUNT_KEY: "{{ report_blob_account_key }}"
+        AZ_REPORT_CONTAINER: "{{ azure_visibility_report_container_name }}"
+        AZ_REPORT_BLOB: "{{ azure_visibility_report_blob_name }}"
+        AZ_REPORT_SAS_HOURS: "{{ azure_visibility_sas_validity_hours | string }}"
+      register: _visibility_sas_url_cmd
+      changed_when: false
+
+    - name: Set report URL fact (SAS)
+      when:
+        - azure_visibility_publish_report | bool
+        - not ansible_check_mode
       ansible.builtin.set_fact:
-        azure_visibility_report_url: >-
-          https://{{ azure_visibility_report_storage_account_name }}.blob.core.windows.net/{{ azure_visibility_report_container_name }}/{{ azure_visibility_report_blob_name }}
+        azure_visibility_report_url: "{{ _visibility_sas_url_cmd.stdout | trim }}"
 
     - name: Clear report URL when not publishing
       when: not (azure_visibility_publish_report | bool) or ansible_check_mode
@@ -69,7 +156,7 @@
     - name: Show report URL
       ansible.builtin.debug:
         msg: >-
-          Report URL: {{ azure_visibility_report_url if (azure_visibility_report_url | default('') | length > 0) else '(not published - see azure_visibility_publish_report / check mode)' }}
+          Report URL (read SAS, expires per azure_visibility_sas_validity_hours): {{ azure_visibility_report_url if (azure_visibility_report_url | default('') | length > 0) else '(not published - see azure_visibility_publish_report / check mode)' }}
 
     - name: Publish report URL for follow-on workflow jobs (AAP set_stats)
       ansible.builtin.set_stats:
