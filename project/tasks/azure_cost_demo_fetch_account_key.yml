@@ -1,0 +1,42 @@
+---
+# Resolves azure_cost_demo_account_key via management plane (listKeys). Typical SP: Contributor on RG.
+# Use when azure_cost_demo_blob_auth_mode == 'key' (default). no_log hides key material.
+# Requires: az login (include azure_cli_sp_login.yml before this file).
+#
+- name: List storage account keys for blob CLI (management plane)
+  when: (azure_cost_demo_blob_auth_mode | default('key') | string | lower | trim) == 'key'
+  ansible.builtin.command:
+    argv:
+      - az
+      - storage
+      - account
+      - keys
+      - list
+      - "--resource-group"
+      - "{{ azure_cost_demo_resource_group_name | default(container_workload_resource_group_name) }}"
+      - "--account-name"
+      - "{{ azure_cost_demo_storage_account_name }}"
+      - "--query"
+      - keys[0].value
+      - "-o"
+      - tsv
+  register: _azure_cost_demo_keys_list
+  changed_when: false
+  no_log: true
+
+- name: Record storage account key for az storage data commands
+  when: (azure_cost_demo_blob_auth_mode | default('key') | string | lower | trim) == 'key'
+  ansible.builtin.set_fact:
+    azure_cost_demo_account_key: "{{ _azure_cost_demo_keys_list.stdout | trim }}"
+  no_log: true
+
+- name: Confirm storage account key was returned
+  when: (azure_cost_demo_blob_auth_mode | default('key') | string | lower | trim) == 'key'
+  ansible.builtin.assert:
+    that:
+      - (azure_cost_demo_account_key | default('', true) | length) > 0
+    fail_msg: >-
+      listKeys returned an empty key. Ensure the credential can list keys on storage account
+      {{ azure_cost_demo_storage_account_name }} (e.g. Contributor on resource group
+      {{ azure_cost_demo_resource_group_name | default(container_workload_resource_group_name) }}).
+    quiet: true

@@ -1,8 +1,7 @@
 ---
 # Demo prep: ensure hot + archive blob containers exist and seed a small blob under candidates/.
-# Run after visibility stack exists (same RG as workload). Requires SP with Storage Blob Data Contributor.
-#
-# Workflow hint: place an AAP Approval node before this job in production-like demos.
+# Default auth: storage account key (listKeys) — works when the SP is Contributor on the RG.
+# Set azure_cost_demo_blob_auth_mode: login and grant Storage Blob Data Contributor for OAuth-only demos.
 #
 - name: Ensure cost demo blob containers and seed blob
   hosts: localhost
@@ -12,10 +11,65 @@
     - vars/container_workload_defaults.yml
     - vars/azure_cost_demo_defaults.yml
   tasks:
+    - name: Normalize cost demo blob auth mode
+      ansible.builtin.set_fact:
+        _cost_demo_blob_auth: "{{ (azure_cost_demo_blob_auth_mode | default('key') | string | lower | trim) }}"
+
+    - name: Require blob auth mode key or login
+      ansible.builtin.assert:
+        that:
+          - _cost_demo_blob_auth in ['key', 'login']
+        fail_msg: >-
+          azure_cost_demo_blob_auth_mode must be "key" or "login" (got "{{ _cost_demo_blob_auth }}").
+        quiet: true
+
     - name: Azure CLI login for storage commands
       ansible.builtin.include_tasks: tasks/azure_cli_sp_login.yml
 
-    - name: Check hot container exists
+    - name: Fetch storage account key (key auth mode)
+      ansible.builtin.include_tasks: tasks/azure_cost_demo_fetch_account_key.yml
+      when: _cost_demo_blob_auth == 'key'
+
+    - name: Ensure demo containers and seed blob (account key auth)
+      when: _cost_demo_blob_auth == 'key'
+      environment:
+        DEMO_STORAGE_KEY: "{{ azure_cost_demo_account_key }}"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        ACCT="{{ azure_cost_demo_storage_account_name }}"
+        HOT="{{ azure_cost_demo_hot_container }}"
+        ARC="{{ azure_cost_demo_archive_container }}"
+        PREFIX="{{ azure_cost_demo_hot_blob_prefix }}"
+        SEED="{{ azure_cost_demo_seed_blob_name }}"
+        KEY="$DEMO_STORAGE_KEY"
+        need_create() {
+          local c="$1"
+          local ex
+          ex=$(az storage container exists --name "$c" --account-name "$ACCT" --account-key "$KEY" -o json \
+            | python3 -c "import json,sys; print(str(json.load(sys.stdin).get('exists')).lower())")
+          if [ "$ex" != "true" ]; then
+            az storage container create --name "$c" --account-name "$ACCT" --account-key "$KEY"
+          fi
+        }
+        need_create "$HOT"
+        need_create "$ARC"
+        MSG="cost-demo seed UTC $(date -u +%Y-%m-%dT%H:%M:%SZ) (ansible)"
+        printf '%s\n' "$MSG" | az storage blob upload \
+          --account-name "$ACCT" \
+          --container-name "$HOT" \
+          --name "${PREFIX}${SEED}" \
+          --data @- \
+          --auth-mode key \
+          --account-key "$KEY" \
+          --overwrite
+      args:
+        executable: /bin/bash
+      register: azure_cost_demo_seed
+      changed_when: true
+      no_log: true
+
+    - name: Check hot container exists (OAuth)
+      when: _cost_demo_blob_auth == 'login'
       ansible.builtin.command:
         argv:
           - az
@@ -34,7 +88,8 @@
       changed_when: false
       failed_when: false
 
-    - name: Record whether hot container exists
+    - name: Record whether hot container exists (OAuth)
+      when: _cost_demo_blob_auth == 'login'
       ansible.builtin.set_fact:
         azure_cost_demo_hot_exists: >-
           {{
@@ -43,7 +98,10 @@
             else false
           }}
 
-    - name: Create hot container when missing
+    - name: Create hot container when missing (OAuth)
+      when:
+        - _cost_demo_blob_auth == 'login'
+        - not (azure_cost_demo_hot_exists | bool)
       ansible.builtin.command:
         argv:
           - az
@@ -56,11 +114,11 @@
           - "{{ azure_cost_demo_storage_account_name }}"
           - "--auth-mode"
           - login
-      when: not (azure_cost_demo_hot_exists | bool)
       register: azure_cost_demo_hot_create
       changed_when: azure_cost_demo_hot_create.rc == 0
 
-    - name: Check archive container exists
+    - name: Check archive container exists (OAuth)
+      when: _cost_demo_blob_auth == 'login'
       ansible.builtin.command:
         argv:
           - az
@@ -79,7 +137,8 @@
       changed_when: false
       failed_when: false
 
-    - name: Record whether archive container exists
+    - name: Record whether archive container exists (OAuth)
+      when: _cost_demo_blob_auth == 'login'
       ansible.builtin.set_fact:
         azure_cost_demo_archive_exists: >-
           {{
@@ -88,7 +147,10 @@
             else false
           }}
 
-    - name: Create archive container when missing
+    - name: Create archive container when missing (OAuth)
+      when:
+        - _cost_demo_blob_auth == 'login'
+        - not (azure_cost_demo_archive_exists | bool)
       ansible.builtin.command:
         argv:
           - az
@@ -101,11 +163,11 @@
           - "{{ azure_cost_demo_storage_account_name }}"
           - "--auth-mode"
           - login
-      when: not (azure_cost_demo_archive_exists | bool)
       register: azure_cost_demo_arc_create
       changed_when: azure_cost_demo_arc_create.rc == 0
 
-    - name: Seed demo blob with UTC timestamp (overwrite ok)
+    - name: Seed demo blob with UTC timestamp (OAuth)
+      when: _cost_demo_blob_auth == 'login'
       ansible.builtin.shell: |
         set -euo pipefail
         MSG="cost-demo seed UTC $(date -u +%Y-%m-%dT%H:%M:%SZ) (ansible)"

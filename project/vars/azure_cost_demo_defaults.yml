@@ -5,6 +5,14 @@
 # When true, playbook 10 lists blobs under the hot container/prefix and surfaces stale ones in the HTML report.
 azure_cost_demo_enabled: true
 
+# Blob data-plane auth for az storage (10 / 12 / 13). Value is case-insensitive; must be exactly key or login.
+#   key   — default; uses Microsoft.Storage/storageAccounts/listKeys (SP usually needs Contributor on RG).
+#   login — OAuth only; requires Storage Blob Data Reader/Contributor on the storage account (no listKeys).
+azure_cost_demo_blob_auth_mode: key
+
+# Optional override when the storage account lives in a different RG than the workload stack.
+# azure_cost_demo_resource_group_name: "aca-ansible-demo-rg"
+
 # Must match (or override) the storage account used by the ACA demo stack.
 azure_cost_demo_storage_account_name: "acaansibledemo001"
 

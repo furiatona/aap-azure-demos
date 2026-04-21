@@ -1,12 +1,64 @@
 ---
 # Sets facts for the visibility report and for playbook 13:
-#   azure_cost_demo_stale_blobs  — list of dicts: { name, lastModified } (blob path within container)
+#   azure_cost_demo_stale_blobs  — list of dicts: { name, lastModified, accessTier }
 #   azure_cost_demo_blob_inventory_error — short error string when list/filter fails (optional)
 #
-# Requires: Azure CLI session (include azure_cli_sp_login.yml before this task file).
-# Auth: --auth-mode login (Entra ID) — grant the SP "Storage Blob Data Reader" on the storage account.
+# Requires: include azure_cli_sp_login.yml before this file.
+# Auth (azure_cost_demo_blob_auth_mode, case-insensitive):
+#   key   — default; listKeys + --account-key
+#   login — OAuth; Storage Blob Data Reader on the storage account
 #
-- name: List blobs under demo prefix (JSON)
+- name: Normalize cost demo blob auth mode
+  ansible.builtin.set_fact:
+    _cost_demo_blob_auth: "{{ (azure_cost_demo_blob_auth_mode | default('key') | string | lower | trim) }}"
+
+- name: Require blob auth mode key or login
+  ansible.builtin.assert:
+    that:
+      - _cost_demo_blob_auth in ['key', 'login']
+    fail_msg: >-
+      azure_cost_demo_blob_auth_mode must be "key" or "login" (got "{{ _cost_demo_blob_auth }}").
+    quiet: true
+
+- name: Prime blob list result (avoids undefined azure_cost_demo_blob_list_cmd if list tasks skip)
+  ansible.builtin.set_fact:
+    azure_cost_demo_blob_list_cmd:
+      rc: 2
+      stdout: "[]"
+      stderr: ""
+
+- name: Fetch storage account key for blob CLI (when using key auth)
+  ansible.builtin.include_tasks: tasks/azure_cost_demo_fetch_account_key.yml
+  when: _cost_demo_blob_auth == 'key'
+
+- name: List blobs under demo prefix (JSON, account key)
+  ansible.builtin.command:
+    argv:
+      - az
+      - storage
+      - blob
+      - list
+      - "--auth-mode"
+      - key
+      - "--account-key"
+      - "{{ azure_cost_demo_account_key }}"
+      - "--account-name"
+      - "{{ azure_cost_demo_storage_account_name }}"
+      - "--container-name"
+      - "{{ azure_cost_demo_hot_container }}"
+      - "--prefix"
+      - "{{ azure_cost_demo_hot_blob_prefix }}"
+      - "-o"
+      - json
+  register: azure_cost_demo_blob_list_cmd
+  changed_when: false
+  failed_when: false
+  when:
+    - _cost_demo_blob_auth == 'key'
+    - azure_cost_demo_account_key is defined
+    - (azure_cost_demo_account_key | default('', true) | length) > 0
+
+- name: List blobs under demo prefix (JSON, OAuth / RBAC)
   ansible.builtin.command:
     argv:
       - az
@@ -26,12 +78,26 @@
   register: azure_cost_demo_blob_list_cmd
   changed_when: false
   failed_when: false
+  when: _cost_demo_blob_auth == 'login'
 
-- name: No blob list (container missing or no access) — empty candidates
+- name: No blob list (container missing, no access, or list step did not run) — empty candidates
   ansible.builtin.set_fact:
     azure_cost_demo_stale_blobs: []
-    azure_cost_demo_blob_inventory_error: "{{ azure_cost_demo_blob_list_cmd.stderr | default('', true) | trim }}"
-  when: azure_cost_demo_blob_list_cmd.rc != 0
+    azure_cost_demo_blob_inventory_error: >-
+      {{
+        (
+          (azure_cost_demo_blob_list_cmd.stderr | default('', true) | trim)
+          if ((azure_cost_demo_blob_list_cmd.rc | default(2) | int) != 2)
+          else (
+            'No az storage blob list ran. Use azure_cost_demo_blob_auth_mode key (default; needs listKeys on the storage account RG) '
+            ~ 'or login (needs Storage Blob Data Reader). Current mode was parsed as: '
+            ~ _cost_demo_blob_auth ~ '.'
+          )
+        )
+      }}
+  when:
+    - azure_cost_demo_blob_list_cmd is defined
+    - (azure_cost_demo_blob_list_cmd.rc | default(2) | int) != 0
 
 - name: Filter stale Hot/Cool blobs by last-modified age (minutes) and tier
   ansible.builtin.command:
@@ -44,12 +110,10 @@
         raw = json.loads(sys.stdin.read() or "[]")
         minutes = int(os.environ.get("AZURE_COST_DEMO_AGE_MINUTES", "5"))
         now = datetime.now(timezone.utc)
-        # minutes <= 0 means "flag every Hot/Cool blob in prefix" for instant lab demos.
         cut = now - timedelta(minutes=minutes) if minutes > 0 else now + timedelta(seconds=30)
         out = []
 
         def parse_last_modified(lm_s):
-            """Azure sometimes returns 7-digit fractional seconds; normalize for fromisoformat."""
             if not lm_s:
                 raise ValueError("empty lastModified")
             s = lm_s.strip().replace("Z", "+00:00")
@@ -84,7 +148,9 @@
   register: azure_cost_demo_stale_cmd
   changed_when: false
   failed_when: false
-  when: azure_cost_demo_blob_list_cmd.rc == 0
+  when:
+    - azure_cost_demo_blob_list_cmd is defined
+    - (azure_cost_demo_blob_list_cmd.rc | default(2) | int) == 0
 
 - name: Record stale blob facts from filter
   ansible.builtin.set_fact:
@@ -96,7 +162,8 @@
       }}
     azure_cost_demo_blob_inventory_error: "{{ azure_cost_demo_stale_cmd.stderr | default('', true) | trim }}"
   when:
-    - azure_cost_demo_blob_list_cmd.rc == 0
+    - azure_cost_demo_blob_list_cmd is defined
+    - (azure_cost_demo_blob_list_cmd.rc | default(2) | int) == 0
     - azure_cost_demo_stale_cmd is defined
     - (azure_cost_demo_stale_cmd.rc | default(1)) == 0
 
@@ -105,6 +172,7 @@
     azure_cost_demo_stale_blobs: []
     azure_cost_demo_blob_inventory_error: "{{ azure_cost_demo_stale_cmd.stderr | default(azure_cost_demo_stale_cmd.msg | default('filter failed', true), true) }}"
   when:
-    - azure_cost_demo_blob_list_cmd.rc == 0
+    - azure_cost_demo_blob_list_cmd is defined
+    - (azure_cost_demo_blob_list_cmd.rc | default(2) | int) == 0
     - azure_cost_demo_stale_cmd is defined
     - (azure_cost_demo_stale_cmd.rc | default(1)) != 0

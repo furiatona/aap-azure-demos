@@ -75,7 +75,20 @@
       rescue:
         - ansible.builtin.set_fact:
             azure_cost_demo_stale_blobs: []
-            azure_cost_demo_blob_inventory_error: "{{ ansible_failed_result.msg | default('cost demo blob inventory failed', true) }}"
+            azure_cost_demo_blob_inventory_error: >-
+              {{
+                (
+                  (ansible_failed_result.msg | default('', true))
+                  ~ (
+                    ' '
+                    ~ (ansible_failed_result.stderr | default('', true))
+                    if (ansible_failed_result.stderr | default('', true) | length) > 0
+                    else ''
+                  )
+                )
+                if ansible_failed_result is defined
+                else 'cost demo blob inventory failed'
+              }}
 
     - name: Render HTML report locally
       ansible.builtin.template:

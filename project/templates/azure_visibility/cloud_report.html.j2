@@ -323,7 +323,7 @@
 {% if azure_cost_demo_enabled | default(false) %}
         <div class="demo-cost-wrap">
 {% if (azure_cost_demo_blob_inventory_error | default('') | length) > 0 %}
-          <p class="demo-cost-err"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Blob scan failed: <span class="mono">{{ azure_cost_demo_blob_inventory_error }}</span> (needs Storage Blob Data Reader + <span class="mono">az login</span>).</p>
+          <p class="demo-cost-err"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Blob scan failed: <span class="mono">{{ azure_cost_demo_blob_inventory_error }}</span> (default: account key via listKeys — SP needs Contributor or key access on the RG; or set <span class="mono">azure_cost_demo_blob_auth_mode: login</span> and grant <strong>Storage Blob Data Reader</strong> + <span class="mono">az login</span>).</p>
 {% endif %}
 {% for c in (azure_cost_demo_stale_blobs | default([])) %}
           <div class="demo-cost-alert" role="status">

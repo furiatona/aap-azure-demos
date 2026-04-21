@@ -95,7 +95,7 @@ Suggested Controller chain (after **04** exists, same credential/EE with **`az`*
 5. **13** — `project/13_archive_cost_demo_blobs.yml` (optional `-e azure_cost_demo_dry_run=true` on the job template for plan-only).
 6. **14** — `project/14_send_ntfy_cost_demo_archive.yml` (reads `set_stats` from **13**: `cost_demo_archived_count`, `cost_demo_archived_blob_names`, `cost_demo_dry_run`).
 
-**RBAC:** Service principal needs **Storage Blob Data Reader** for **10**/**13** list, and **Storage Blob Data Contributor** for **12** upload and **13** `set-tier`. **Rehearse timing:** wait at least `azure_cost_demo_age_minutes` after **12** (or lower the threshold in extra vars) before **10** or **13** so the seed blob qualifies as “stale.”
+**RBAC / auth:** Default is **`azure_cost_demo_blob_auth_mode: key`** (uses **listKeys** + `--account-key` on `az storage` — typical if the SP is **Contributor** on the resource group). For OAuth-only, set **`azure_cost_demo_blob_auth_mode: login`** and grant **Storage Blob Data Reader** (report) and **Storage Blob Data Contributor** (**12**/**13** writes). **Rehearse timing:** wait at least `azure_cost_demo_age_minutes` after **12** (or use `azure_cost_demo_age_minutes: 0`) before **10**/**13** so the seed blob qualifies as “stale.”
 
 ---
 
