@@ -6,9 +6,13 @@
 azure_cost_demo_enabled: true
 
 # Blob data-plane auth for az storage (10 / 12 / 13). Value is case-insensitive; must be exactly key or login.
-#   key   — default; uses Microsoft.Storage/storageAccounts/listKeys (SP usually needs Contributor on RG).
+#   key   — default; resolves key via (a) extra var azure_cost_demo_account_key, (b) env AZURE_COST_DEMO_STORAGE_ACCOUNT_KEY,
+#           or (c) az storage account keys list when SP has listKeys (e.g. Contributor on RG).
 #   login — OAuth only; requires Storage Blob Data Reader/Contributor on the storage account (no listKeys).
+# Optional one-shot RBAC: playbook 15_grant_cost_demo_storage_blob_rbac.yml (run with Owner/UAA), then login mode.
 azure_cost_demo_blob_auth_mode: key
+
+# Injected key for demo SPs without listKeys: set only on the job template (vault/survey) or EE env AZURE_COST_DEMO_STORAGE_ACCOUNT_KEY — not in this file.
 
 # Optional override when the storage account lives in a different RG than the workload stack.
 # azure_cost_demo_resource_group_name: "aca-ansible-demo-rg"

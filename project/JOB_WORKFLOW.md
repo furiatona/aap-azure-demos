@@ -82,11 +82,11 @@ To send the **Front Door HTTPS URL** to **ntfy** (`ntfy.sh/rh-azure-aca-deployme
 
 **Variables:** `project/vars/azure_visibility_defaults.yml` (visibility app name, ARM deployment name, FD names). Override `aca_visibility_container_app_name` / `azure_visibility_frontdoor_endpoint_name` if Azure reports a naming conflict. Blob cost demo knobs: `project/vars/azure_cost_demo_defaults.yml` (`azure_cost_demo_age_minutes`, containers, prefix).
 
-### Optional blob cost demo (12–14)
+### Optional blob cost demo (12–14) and one-shot RBAC (15)
 
 FinOps-style **Blob** demo (minutes-based “staleness”, not days): **10** can show callouts in the **Storage accounts (detail)** card when Hot/Cool blobs under `democost-hot/candidates/` are older than `azure_cost_demo_age_minutes`. **12** creates containers + seeds a file; **13** sets **Archive** tier on stale blobs; **14** posts ntfy.
 
-Suggested Controller chain (after **04** exists, same credential/EE with **`az`** and **Blob Data** roles on the storage account):
+**Suggested Controller chain** (after **04** exists, same **Project** and **Execution Environment** with **`az`**; credential as below):
 
 1. **10** — visibility report (includes blob scan when `azure_cost_demo_enabled` is true).
 2. **11** — report URL to ntfy (unchanged).
@@ -95,7 +95,15 @@ Suggested Controller chain (after **04** exists, same credential/EE with **`az`*
 5. **13** — `project/13_archive_cost_demo_blobs.yml` (optional `-e azure_cost_demo_dry_run=true` on the job template for plan-only).
 6. **14** — `project/14_send_ntfy_cost_demo_archive.yml` (reads `set_stats` from **13**: `cost_demo_archived_count`, `cost_demo_archived_blob_names`, `cost_demo_dry_run`).
 
-**RBAC / auth:** Default is **`azure_cost_demo_blob_auth_mode: key`** (uses **listKeys** + `--account-key` on `az storage` — typical if the SP is **Contributor** on the resource group). For OAuth-only, set **`azure_cost_demo_blob_auth_mode: login`** and grant **Storage Blob Data Reader** (report) and **Storage Blob Data Contributor** (**12**/**13** writes). **Rehearse timing:** wait at least `azure_cost_demo_age_minutes` after **12** (or use `azure_cost_demo_age_minutes: 0`) before **10**/**13** so the seed blob qualifies as “stale.”
+**RBAC / auth (pick one):**
+
+1. **Demo-friendly, SP without `listKeys`:** keep **`azure_cost_demo_blob_auth_mode: key`** (default). Supply the storage account key **once** on the job (not in Git): **extra variable** `azure_cost_demo_account_key` from a **survey** or **vault**-backed credential on templates **10**/**12**/**13**, **or** set environment **`AZURE_COST_DEMO_STORAGE_ACCOUNT_KEY`** on the job (e.g. **Machine** / **Custom** credential type that injects env into the EE). Playbooks skip **`az storage account keys list`** when either is set. Rotate the key in Azure and update the secret when keys roll.
+
+2. **SP can call `listKeys`:** same **`key`** mode; omit the extra var and env so the playbooks call **`listKeys`** (typical when the SP is **Contributor** on the resource group).
+
+3. **OAuth-only (no keys):** **`azure_cost_demo_blob_auth_mode: login`** with **Storage Blob Data Reader** / **Contributor** on the storage account for the job SP. Optionally run **`15_grant_cost_demo_storage_blob_rbac.yml` once** with an identity that has **Owner** or **User Access Administrator** on the account or RG to grant **Blob Data Contributor** to the SP in **`AZURE_CLIENT_ID` / `ARM_CLIENT_ID`**, then use **login** on **10**/**12**/**13**.
+
+**Rehearse timing:** wait at least `azure_cost_demo_age_minutes` after **12** (or use `azure_cost_demo_age_minutes: 0`) before **10**/**13** so the seed blob qualifies as “stale.”
 
 ---
 

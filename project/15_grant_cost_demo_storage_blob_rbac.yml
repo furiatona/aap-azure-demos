@@ -1,0 +1,112 @@
+---
+# One-shot: grant the automation service principal Storage Blob Data Contributor on the cost-demo storage account.
+# Run with an identity that can create role assignments (Owner or User Access Administrator on the RG or account).
+# The assignee is the SP your AAP Azure credential uses: AZURE_CLIENT_ID or ARM_CLIENT_ID.
+#
+# After this succeeds, set extra var azure_cost_demo_blob_auth_mode: login on jobs 10/12/13 so blob operations
+# use OAuth only (no listKeys, no account keys in job output).
+#
+- name: Grant Blob Data Contributor to automation SP on cost-demo storage account
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars/container_workload_defaults.yml
+    - vars/azure_cost_demo_defaults.yml
+  vars:
+    azure_cost_demo_rbac_role: "Storage Blob Data Contributor"
+  tasks:
+    - name: Azure CLI login (must be able to create role assignments on the storage scope)
+      ansible.builtin.include_tasks: tasks/azure_cli_sp_login.yml
+
+    - name: Resolve service principal application id from environment
+      ansible.builtin.set_fact:
+        _cost_demo_sp_app_id: >-
+          {{
+            lookup('env', 'AZURE_CLIENT_ID', errors='ignore') | default('', true)
+            if (lookup('env', 'AZURE_CLIENT_ID', errors='ignore') | default('', true) | length) > 0
+            else lookup('env', 'ARM_CLIENT_ID', errors='ignore') | default('', true)
+          }}
+
+    - name: Require AZURE_CLIENT_ID or ARM_CLIENT_ID
+      ansible.builtin.assert:
+        that:
+          - (_cost_demo_sp_app_id | default('', true) | length) > 0
+        fail_msg: >-
+          Set AZURE_CLIENT_ID (or ARM_CLIENT_ID) to the application id of the service principal that runs jobs 10/12/13.
+        quiet: true
+
+    - name: Resolve service principal object id (for role assignment)
+      ansible.builtin.command:
+        argv:
+          - az
+          - ad
+          - sp
+          - show
+          - "--id"
+          - "{{ _cost_demo_sp_app_id }}"
+          - "--query"
+          - id
+          - "-o"
+          - tsv
+      register: _cost_demo_sp_oid_cmd
+      changed_when: false
+
+    - name: Resolve storage account ARM resource id
+      ansible.builtin.command:
+        argv:
+          - az
+          - storage
+          - account
+          - show
+          - "--resource-group"
+          - "{{ azure_cost_demo_resource_group_name | default(container_workload_resource_group_name) }}"
+          - "--name"
+          - "{{ azure_cost_demo_storage_account_name }}"
+          - "--query"
+          - id
+          - "-o"
+          - tsv
+      register: _cost_demo_sa_id_cmd
+      changed_when: false
+
+    - name: Count existing role assignments for this role at storage scope
+      ansible.builtin.command:
+        argv:
+          - az
+          - role
+          - assignment
+          - list
+          - "--assignee"
+          - "{{ _cost_demo_sp_oid_cmd.stdout | trim }}"
+          - "--scope"
+          - "{{ _cost_demo_sa_id_cmd.stdout | trim }}"
+          - "--query"
+          - "[?roleDefinitionName=='{{ azure_cost_demo_rbac_role }}'] | length(@)"
+          - "-o"
+          - tsv
+      register: _cost_demo_role_count_cmd
+      changed_when: false
+
+    - name: Create Storage Blob Data Contributor assignment at storage account scope
+      ansible.builtin.command:
+        argv:
+          - az
+          - role
+          - assignment
+          - create
+          - "--assignee-object-id"
+          - "{{ _cost_demo_sp_oid_cmd.stdout | trim }}"
+          - "--role"
+          - "{{ azure_cost_demo_rbac_role }}"
+          - "--scope"
+          - "{{ _cost_demo_sa_id_cmd.stdout | trim }}"
+      when: (_cost_demo_role_count_cmd.stdout | default('0') | trim | int) == 0
+      register: _cost_demo_role_create_cmd
+
+    - name: Report RBAC outcome
+      ansible.builtin.debug:
+        msg: >-
+          {{ azure_cost_demo_rbac_role }} on {{ azure_cost_demo_storage_account_name }}:
+          {{ 'created assignment' if ((_cost_demo_role_count_cmd.stdout | default('0') | trim | int) == 0) else 'already present' }}.
+          Use azure_cost_demo_blob_auth_mode: login on playbooks 10, 12, 13.
