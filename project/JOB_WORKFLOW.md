@@ -99,7 +99,7 @@ FinOps-style **Blob** demo (minutes-based “staleness”, not days): **10** can
 
 1. **Demo-friendly, SP without `listKeys`:** keep **`azure_cost_demo_blob_auth_mode: key`** (default). Supply the storage account key **once** on the job (not in Git): **extra variable** `azure_cost_demo_account_key` from a **survey** or **vault**-backed credential on templates **10**/**12**/**13**, **or** set environment **`AZURE_COST_DEMO_STORAGE_ACCOUNT_KEY`** on the job (e.g. **Machine** / **Custom** credential type that injects env into the EE). Playbooks skip **`az storage account keys list`** when either is set. Rotate the key in Azure and update the secret when keys roll.
 
-2. **SP can call `listKeys`:** same **`key`** mode; omit the extra var and env so the playbooks call **`listKeys`** (typical when the SP is **Contributor** on the resource group).
+2. **SP can call `listKeys`:** same **`key`** mode; omit the extra var and env. The playbooks run **`az storage account keys list`** and read the key via a **temp file + slurp** so Ansible Controller does not strip key-shaped strings from registered `stdout` (a common cause of false “empty key” failures).
 
 3. **OAuth-only (no keys):** **`azure_cost_demo_blob_auth_mode: login`** with **Storage Blob Data Reader** / **Contributor** on the storage account for the job SP. Optionally run **`15_grant_cost_demo_storage_blob_rbac.yml` once** with an identity that has **Owner** or **User Access Administrator** on the account or RG to grant **Blob Data Contributor** to the SP in **`AZURE_CLIENT_ID` / `ARM_CLIENT_ID`**, then use **login** on **10**/**12**/**13**.
 

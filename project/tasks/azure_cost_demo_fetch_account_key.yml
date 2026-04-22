@@ -5,8 +5,9 @@
 # and skip listKeys. (2) Else if env AZURE_COST_DEMO_STORAGE_ACCOUNT_KEY is set (e.g. custom credential), use it.
 # (3) Else call az storage account keys list (SP needs listKeys, e.g. Contributor on RG).
 #
-# Do NOT set no_log on the list-keys command: on AAP/Ansible, no_log can redact registered stdout and break (1)
-# indirectly. Key material stays off logs on set_fact and downstream tasks that use no_log with --account-key.
+# listKeys output must not pass through registered task stdout on Controller: some deployments redact key-shaped
+# strings even when rc is 0. We write the key to a temp file (task stdout is only the path), then slurp the file.
+# Key material stays off logs on slurp/set_fact (no_log) and downstream --account-key tasks.
 # Requires: az login before this file (include azure_cli_sp_login.yml) when using listKeys.
 #
 - name: Pick up optional pre-supplied storage account key (extra var or job env)
@@ -20,57 +21,47 @@
       }}
   no_log: true
 
-- name: List storage account keys for blob CLI (management plane)
+- name: List storage account keys into temp file (stdout is path only; avoids Controller redaction of key output)
   when: >-
     (azure_cost_demo_blob_auth_mode | default('key') | string | lower | trim) == 'key'
     and ((_azure_cost_demo_key_preloaded | default('', true) | trim) | length) == 0
-  ansible.builtin.command:
-    argv:
-      - az
-      - storage
-      - account
-      - keys
-      - list
-      - "--resource-group"
-      - "{{ azure_cost_demo_resource_group_name | default(container_workload_resource_group_name) }}"
-      - "--account-name"
-      - "{{ azure_cost_demo_storage_account_name }}"
-      - "--query"
-      - keys[0].value
-      - "-o"
-      - tsv
-  register: _azure_cost_demo_keys_list
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      KEYFILE="$(mktemp)"
+      az storage account keys list \
+        --resource-group "{{ azure_cost_demo_resource_group_name | default(container_workload_resource_group_name) }}" \
+        --account-name "{{ azure_cost_demo_storage_account_name }}" \
+        --query "keys[0].value" \
+        -o tsv > "${KEYFILE}"
+      test -s "${KEYFILE}"
+      printf '%s' "${KEYFILE}"
+  register: _azure_cost_demo_keyfile_path
   changed_when: false
-  failed_when: false
 
-- name: Validate listKeys exit code and non-empty key
+- name: Load key from temp file into memory
   when: >-
     (azure_cost_demo_blob_auth_mode | default('key') | string | lower | trim) == 'key'
     and ((_azure_cost_demo_key_preloaded | default('', true) | trim) | length) == 0
-  ansible.builtin.assert:
-    that:
-      - (_azure_cost_demo_keys_list.rc | default(1) | int) == 0
-      - ((_azure_cost_demo_keys_list.stdout | default('', true) | trim) | length) > 0
-    fail_msg: >-
-      {% if (_azure_cost_demo_keys_list.rc | default(1) | int) != 0 %}
-      listKeys failed (rc={{ _azure_cost_demo_keys_list.rc }}): {{ (_azure_cost_demo_keys_list.stderr | default('', true)) | trim }}.
-      Grant Microsoft.Storage/storageAccounts/listKeys/action (e.g. Contributor on RG
-      {{ azure_cost_demo_resource_group_name | default(container_workload_resource_group_name) }}),
-      or provide the key once as extra var azure_cost_demo_account_key / env AZURE_COST_DEMO_STORAGE_ACCOUNT_KEY,
-      or set azure_cost_demo_blob_auth_mode: login with Blob Data roles (optional playbook 15).
-      {% else %}
-      listKeys succeeded but returned an empty value (registered stdout empty). On Controller, do not set no_log
-      on this list-keys task. Otherwise confirm account {{ azure_cost_demo_storage_account_name }} exists in that RG,
-      or supply azure_cost_demo_account_key / AZURE_COST_DEMO_STORAGE_ACCOUNT_KEY, or use login + Blob Data RBAC.
-      {% endif %}
-    quiet: true
+  ansible.builtin.slurp:
+    src: "{{ _azure_cost_demo_keyfile_path.stdout | trim }}"
+  register: _azure_cost_demo_key_slurp
+  no_log: true
 
-- name: Record storage account key from listKeys
+- name: Remove temp key file from execution host
+  when: >-
+    (azure_cost_demo_blob_auth_mode | default('key') | string | lower | trim) == 'key'
+    and ((_azure_cost_demo_key_preloaded | default('', true) | trim) | length) == 0
+  ansible.builtin.file:
+    path: "{{ _azure_cost_demo_keyfile_path.stdout | trim }}"
+    state: absent
+
+- name: Record storage account key from listKeys (via file handoff)
   when: >-
     (azure_cost_demo_blob_auth_mode | default('key') | string | lower | trim) == 'key'
     and ((_azure_cost_demo_key_preloaded | default('', true) | trim) | length) == 0
   ansible.builtin.set_fact:
-    azure_cost_demo_account_key: "{{ _azure_cost_demo_keys_list.stdout | trim }}"
+    azure_cost_demo_account_key: "{{ _azure_cost_demo_key_slurp.content | b64decode | trim }}"
   no_log: true
 
 - name: Record storage account key from pre-supplied value
